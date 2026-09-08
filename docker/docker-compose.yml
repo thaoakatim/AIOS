@@ -1,0 +1,174 @@
+# ==============================================================================
+# AIOS (Personal AI Operating System) — Infrastructure Stack
+# Đặc tả hạ tầng kỹ thuật dựa trên docs/architecture.md:
+# 1. PostgreSQL (pgvector/pgvector:pg16): Dữ liệu quan hệ, nghiệp vụ & Vector embeddings
+# 2. Redis (redis:7-alpine): Cache streaming session, rate limiting, pub/sub & BullMQ queue
+# 3. Qdrant (qdrant/qdrant:latest): Vector Database chuyên dụng cho Knowledge & RAG
+# 4. Ollama (ollama/ollama:latest): Local LLM Provider (kích hoạt qua profile: ollama)
+# 5. Dev Tools (adminer, redis-commander): UI quản lý trực quan (profile: tools)
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL with pgvector extension
+  # Lưu trữ: Conversation, Message, Memory, Plan, Task, WorkflowState, Vector Chunks
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aios-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5433}:5433"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aios_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aios_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aios_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - aios_postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aios_user} -d $${POSTGRES_DB:-aios_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - aios-network
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis (In-Memory Cache & Message Broker)
+  # Lưu trữ: Streaming session, Rate Limiting, BullMQ Background Jobs
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: aios-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6378}:6378"
+    command: >
+      sh -c '
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes
+        else
+          redis-server --appendonly yes
+        fi
+      '
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+      - aios_redis_data:/data
+    healthcheck:
+      test: >
+        sh -c '
+          if [ -n "$$REDIS_PASSWORD" ]; then
+            redis-cli -a "$$REDIS_PASSWORD" ping
+          else
+            redis-cli ping
+          fi
+        '
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - aios-network
+
+  # ----------------------------------------------------------------------------
+  # 3. Qdrant Vector Database
+  # Lưu trữ: Vector embeddings (768/1536 chiều) phục vụ Semantic Search & RAG
+  # Web UI Console truy cập tại: http://localhost:6333/dashboard
+  # ----------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: aios-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_REST_PORT:-6333}:6333" # REST API & Web Dashboard
+      - "${QDRANT_GRPC_PORT:-6334}:6334" # gRPC Interface
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - aios_qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6333' -- || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - aios-network
+
+  # ----------------------------------------------------------------------------
+  # 4. Ollama (Optional Local LLM)
+  # Chạy LLM cục bộ (Llama 3, Mistral, Qwen, Nomic-Embed) không phụ thuộc cloud
+  # Kích hoạt: docker compose --profile ollama up -d
+  # ----------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aios-ollama
+    restart: unless-stopped
+    profiles:
+      - ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      OLLAMA_KEEP_ALIVE: "24h"
+    volumes:
+      - aios_ollama_data:/root/.ollama
+    networks:
+      - aios-network
+
+  # ----------------------------------------------------------------------------
+  # 5. Database & Cache Management Tools (Optional Dev Profile)
+  # Kích hoạt: docker compose --profile tools up -d
+  # ----------------------------------------------------------------------------
+  adminer:
+    image: adminer:latest
+    container_name: aios-adminer
+    restart: unless-stopped
+    profiles:
+      - tools
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - aios-network
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: aios-redis-commander
+    restart: unless-stopped
+    profiles:
+      - tools
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"
+    environment:
+      REDIS_HOSTS: local:aios-redis:6379:0:${REDIS_PASSWORD:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - aios-network
+
+# ------------------------------------------------------------------------------
+# Mạng và Ổ đĩa lưu trữ bền vững (Networks & Volumes)
+# ------------------------------------------------------------------------------
+networks:
+  aios-network:
+    name: aios-network
+    driver: bridge
+
+volumes:
+  aios_postgres_data:
+    name: aios_postgres_data
+  aios_redis_data:
+    name: aios_redis_data
+  aios_qdrant_data:
+    name: aios_qdrant_data
+  aios_ollama_data:
+    name: aios_ollama_data
+
