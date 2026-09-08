@@ -1,0 +1,5 @@
+.env
+node_modules/
+pnpm-lock.json
+package-lock.json
+package.json
