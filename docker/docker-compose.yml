@@ -18,7 +18,7 @@ services:
     container_name: aios-postgres
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5433}:5433"
+      - "${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aios_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aios_password}
@@ -45,7 +45,7 @@ services:
     container_name: aios-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6378}:6378"
+      - "${REDIS_PORT:-6378}:6379"
     command: >
       sh -c '
         if [ -n "$$REDIS_PASSWORD" ]; then

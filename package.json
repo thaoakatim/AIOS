@@ -1,0 +1,23 @@
+{
+  "name": "aios",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AIOS - Personal AI Operating System",
+  "scripts": {
+    "dev:api": "pnpm --filter api start:dev",
+    "dev:web": "pnpm --filter web dev",
+    "build:api": "pnpm --filter api build",
+    "build:web": "pnpm --filter web build",
+    "build": "pnpm -r build"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "unrs-resolver",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ]
+  }
+}
+

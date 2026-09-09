@@ -1,0 +1,308 @@
+// ==============================================================================
+// AIOS (Personal AI Operating System) — Prisma Database Schema
+// Architecture: Modular Monolith | Message-Centric Design | Single-Agent
+// Database: PostgreSQL 16 with pgvector & uuid-ossp extensions
+// Total: 14 tables across 7 business modules
+// ==============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector, uuid_ossp(map: "uuid-ossp")]
+}
+
+// =============================================================================
+// 1. CHAT MODULE
+//    Entry point của hệ thống. Message là trung tâm (Message-Centric Design).
+// =============================================================================
+
+/// Cuộc hội thoại giữa người dùng và hệ thống AIOS.
+/// Đây là Begin Point (điểm bắt đầu) của toàn bộ luồng dữ liệu.
+model Conversation {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 1:N Relationships
+  messages      Message[]
+  agentSessions AgentSession[]
+
+  @@map("conversations")
+}
+
+/// Tin nhắn trong cuộc hội thoại — Entity trung tâm của AIOS.
+/// Mọi hành động (Agent suy luận, Workflow, Tool gọi) đều bắt nguồn từ đây.
+/// Lưu ý: Dual FK (conversationId + agentSessionId) — tính toàn vẹn được
+/// validate ở tầng Application Service, không ràng buộc ở DB level.
+model Message {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String   @db.Uuid
+  agentSessionId String?  @db.Uuid // Nullable: tin nhắn system/user đầu tiên chưa có session
+  role           String // "user" | "assistant" | "tool" | "system"
+  content        String
+  createdAt      DateTime @default(now())
+
+  // Belongs to
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agentSession AgentSession? @relation(fields: [agentSessionId], references: [id], onDelete: SetNull)
+
+  // Message-Centric Triggers (1:1)
+  agentRun AgentRun?
+  workflow Workflow?
+
+  // 1:N Relationships
+  messageDocuments MessageDocument[]
+
+  @@map("messages")
+}
+
+// =============================================================================
+// 2. AGENTS MODULE (Config → Session → Run)
+//    3 tầng quản lý Agent: Danh tính → Phiên làm việc → Lượt xử lý tin nhắn.
+// =============================================================================
+
+/// Cấu hình danh tính của một Agent (Model, System Prompt, tên vai trò).
+/// Tương đương khái niệm "Assistant" trong OpenAI Assistants API.
+model AgentConfig {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name         String // e.g. "AIOS Chief of Staff", "Coder", "Researcher"
+  modelName    String // e.g. "gpt-4o", "gemini-2.5-pro", "llama3"
+  systemPrompt String
+  createdAt    DateTime @default(now())
+
+  // 1:N Relationships
+  sessions AgentSession[]
+
+  @@map("agent_configs")
+}
+
+/// Phiên làm việc dài hạn giữa Agent và người dùng trong một Conversation.
+/// Một Conversation có thể có nhiều AgentSession (chuyển đổi Agent giữa chừng).
+/// Một AgentSession chứa nhiều Message qua lại.
+model AgentSession {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String   @db.Uuid
+  agentConfigId  String   @db.Uuid
+  status         String   @default("active") // "active" | "closed"
+  createdAt      DateTime @default(now())
+
+  // Belongs to
+  agentConfig  AgentConfig  @relation(fields: [agentConfigId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // 1:N Relationships
+  messages      Message[]
+  memoryRecords MemoryRecord[]
+
+  @@map("agent_sessions")
+}
+
+/// Lượt xử lý (Run) cho chính xác 1 Message. Đây là nơi diễn ra
+/// vòng lặp suy luận ReAct (Reason → Act → Reflect).
+/// Quan hệ 1:1 với Message (mỗi tin nhắn chỉ có tối đa 1 Run).
+model AgentRun {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  messageId   String   @unique @db.Uuid // 1:1 với Message
+  status      String   @default("running") // "running" | "tool_calling" | "completed"
+  totalTokens Int?     @default(0)
+  traceLogs   Json? // Lịch sử Thought → Action → Observation
+  createdAt   DateTime @default(now())
+
+  // Belongs to (1:1)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  // 1:N Relationships
+  toolExecutions ToolExecution[]
+
+  @@map("agent_runs")
+}
+
+// =============================================================================
+// 3. KNOWLEDGE MODULE (RAG & Vector Search)
+//    Quản lý tài liệu upload, chunking, vector embedding cho Semantic Search.
+// =============================================================================
+
+/// Tài liệu gốc do người dùng upload (PDF, MD, DOCX,...).
+/// Trải qua pipeline: pending → processing → indexed | failed.
+model Document {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title     String
+  fileType  String? // e.g. "pdf", "md", "docx"
+  sourceUrl String? // Đường dẫn lưu trữ file gốc trên Local Storage
+  status    String   @default("pending") // "pending" | "processing" | "indexed" | "failed"
+  createdAt DateTime @default(now())
+
+  // 1:N Relationships
+  chunks           DocumentChunk[]
+  messageDocuments MessageDocument[]
+
+  @@map("documents")
+}
+
+/// Bảng trung gian M:N giữa Message và Document.
+/// Giải quyết bài toán: 1 file upload ở nhiều Message, 1 Message đính kèm nhiều file.
+model MessageDocument {
+  messageId  String @db.Uuid
+  documentId String @db.Uuid
+
+  message  Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, documentId])
+  @@map("message_documents")
+}
+
+/// Đoạn văn bản đã được chia nhỏ (Chunk) từ Document gốc.
+/// Chứa vector embedding (pgvector) phục vụ Semantic Search / RAG.
+model DocumentChunk {
+  id         String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  documentId String @db.Uuid
+  content    String
+  metadata   Json? // Thông tin bổ sung: page number, line range, heading,...
+
+  /// Vector embedding 768 chiều (thay đổi thành 1536 nếu dùng OpenAI text-embedding-3-large).
+  /// Prisma chưa hỗ trợ native type vector, sử dụng Unsupported type.
+  embedding Unsupported("vector(768)")?
+
+  // Belongs to
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_chunks")
+}
+
+// =============================================================================
+// 4. TOOLS MODULE
+//    Ghi nhận lịch sử gọi công cụ ngoại vi (Observability & Tracing).
+// =============================================================================
+
+/// Log ghi nhận mỗi lần Agent gọi một Tool (Search, Filesystem, GitHub,...).
+/// Phục vụ debug, đo latency, và kiểm tra an toàn (Policy Guard audit trail).
+model ToolExecution {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  agentRunId  String   @db.Uuid
+  toolName    String // e.g. "web_search", "filesystem_read", "github_create_issue"
+  inputParams Json?
+  result      Json?
+  latencyMs   Int?
+  status      String   @default("success") // "success" | "error"
+  createdAt   DateTime @default(now())
+
+  // Belongs to
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  @@map("tool_executions")
+}
+
+// =============================================================================
+// 5. WORKFLOW MODULE (State Machine & Multi-Step Pipeline)
+//    Quản lý quy trình tự động hóa nhiều bước, hỗ trợ Pause/Resume/Cancel.
+// =============================================================================
+
+/// Quy trình tự động hóa nhiều bước, được kích hoạt bởi 1 Message.
+/// Quan hệ 1:1 với Message (mỗi tin nhắn chỉ sinh tối đa 1 Workflow).
+model Workflow {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  messageId String   @unique @db.Uuid // 1:1 với Message kích hoạt
+  name      String
+  status    String   @default("running") // "running" | "paused" | "completed" | "failed"
+  createdAt DateTime @default(now())
+
+  // Belongs to (1:1)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  // 1:1 & 1:N Relationships
+  plan  Plan?
+  steps WorkflowStep[]
+
+  @@map("workflows")
+}
+
+/// Từng bước (Step) trong quy trình Workflow.
+/// Ghi nhận trạng thái, thứ tự thực thi và kết quả đầu ra của mỗi bước.
+model WorkflowStep {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workflowId String    @db.Uuid
+  stepName   String
+  stepOrder  Int
+  status     String    @default("pending") // "pending" | "running" | "done" | "skipped" | "failed"
+  stepOutput Json?
+  executedAt DateTime?
+
+  // Belongs to
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_steps")
+}
+
+// =============================================================================
+// 6. PLANNER MODULE (Plan & Task Decomposition)
+//    Quản lý kế hoạch và phân rã thành các nhiệm vụ con.
+// =============================================================================
+
+/// Kế hoạch tổng thể, được sinh ra bởi Workflow.
+/// Quan hệ 1:1 với Workflow.
+model Plan {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workflowId String   @unique @db.Uuid // 1:1 với Workflow
+  title      String
+  status     String   @default("active") // "active" | "completed"
+  createdAt  DateTime @default(now())
+
+  // Belongs to (1:1)
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  // 1:N Relationships
+  tasks Task[]
+
+  @@map("plans")
+}
+
+/// Nhiệm vụ cụ thể thuộc một Plan. Hỗ trợ phân cấp cha-con (Sub-tasks)
+/// thông qua Self-referencing FK (parentTaskId).
+model Task {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  planId       String    @db.Uuid
+  parentTaskId String?   @db.Uuid // Nullable: Task gốc không có cha
+  title        String
+  status       String    @default("todo") // "todo" | "in_progress" | "done"
+  dueDate      DateTime?
+  createdAt    DateTime  @default(now())
+
+  // Belongs to
+  plan       Plan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  parentTask Task? @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+
+  // Self-referencing 1:N
+  subTasks Task[] @relation("SubTasks")
+
+  @@map("tasks")
+}
+
+// =============================================================================
+// 7. MEMORY MODULE (Long-Term Fact Memory with Traceability)
+//    Trí nhớ dài hạn Key-Value, nhớ xuyên hội thoại (Cross-Conversation).
+// =============================================================================
+
+/// Ký ức cá nhân hóa của người dùng (Sở thích, Quy tắc, Sự thật).
+/// Dữ liệu này có tính Global — mọi AgentSession đều có thể đọc.
+/// sourceAgentSessionId (Nullable) cho phép truy vết: "AI học được điều này ở phiên nào?".
+model MemoryRecord {
+  id                   String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sourceAgentSessionId String?  @db.Uuid // Nullable: NULL nếu User tự tạo tay qua Dashboard
+  scope                String   @default("global") // "global" | "conversation"
+  category             String // "profile" | "preference" | "fact"
+  key                  String   @unique
+  value                String
+  updatedAt            DateTime @updatedAt
+
+  // Belongs to (Nullable — Traceability link)
+  sourceAgentSession AgentSession? @relation(fields: [sourceAgentSessionId], references: [id], onDelete: SetNull)
+
+  @@map("memory_records")
+}
