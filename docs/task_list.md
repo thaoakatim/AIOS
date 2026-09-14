@@ -23,10 +23,10 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế và tri�
     - **Workflow:** `Workflow`, `WorkflowStep`
     - **Planner:** `Plan`, `Task` (Sub-task self-relation)
     - **Memory:** `MemoryRecord` (Ký ức Global kèm `sourceAgentSessionId` phục vụ truy vết)
-  - [ ] Chạy `pnpm exec prisma migrate dev --name init` tạo bảng trên PostgreSQL thực tế.
+  - [x] Chạy `pnpm exec prisma migrate dev --name init` tạo bảng trên PostgreSQL thực tế.
   - [x] Viết `apps/api/src/infrastructure/database/prisma.service.ts` kết nối NestJS Lifecycle (`onModuleInit`, `onModuleDestroy`) và `PrismaModule`.
 
-- [ ] **Task 0.3: Xây dựng Thư viện Dùng chung (`packages/shared-types`)**
+- [x] **Task 0.3: Xây dựng Thư viện Dùng chung (`packages/shared-types`)**
   - Khởi tạo package `shared-types` trong `packages/` (DTOs, Enums, API Request/Response) để dùng chung cho cả `api` và `web`.
 
 - [ ] **Task 0.4: Tầng Core Contracts (Trừu tượng hóa kiểu Caremate)**

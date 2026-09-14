@@ -7,6 +7,7 @@ import { WorkflowModule } from './modules/workflow/workflow.module';
 import { AgentsModule } from './modules/agents/agents.module';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
+import { ToolsModule } from './modules/tools/tools.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PrismaModule } from './infrastructure/database/prisma.module';
     MemoryModule,
     WorkflowModule,
     AgentsModule,
+    ToolsModule,
   ],
   controllers: [],
   providers: [],
