@@ -29,7 +29,7 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế và tri�
 - [x] **Task 0.3: Xây dựng Thư viện Dùng chung (`packages/shared-types`)**
   - Khởi tạo package `shared-types` trong `packages/` (DTOs, Enums, API Request/Response) để dùng chung cho cả `api` và `web`.
 
-- [ ] **Task 0.4: Tầng Core Contracts (Trừu tượng hóa kiểu Caremate)**
+- [x] **Task 0.4: Tầng Core Contracts (Trừu tượng hóa kiểu Caremate)**
   - `apps/api/src/core/context/agent-context.interface.ts`: Định nghĩa `AgentExecutionContext` (đối tượng bất biến `readonly` mang toàn bộ ngữ cảnh thực thi).
   - `apps/api/src/core/hooks/`: Định nghĩa `AIOSHookHandler` (`onBeforePromptBuild`, `onBeforeToolExecution`, `onAfterToolExecution`, `onAfterCompletion`) & `HookRegistry`.
   - `apps/api/src/core/llm/interfaces/`: Định nghĩa `ILLMClient`, `LLMMessage`, `StreamingChunk`, `TokenUsage`.
