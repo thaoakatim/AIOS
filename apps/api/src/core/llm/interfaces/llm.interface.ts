@@ -28,7 +28,10 @@ export interface ILLMClient {
   /**
    * Generates a single response from the LLM based on the provided messages.
    */
-  generate(messages: LLMMessage[], options?: Record<string, unknown>): Promise<{
+  generate(
+    messages: LLMMessage[],
+    options?: Record<string, unknown>,
+  ): Promise<{
     message: LLMMessage;
     usage: TokenUsage;
     finishReason: string;
@@ -37,6 +40,8 @@ export interface ILLMClient {
   /**
    * Streams a response from the LLM.
    */
-  stream(messages: LLMMessage[], options?: Record<string, unknown>): AsyncIterable<StreamingChunk>;
+  stream(
+    messages: LLMMessage[],
+    options?: Record<string, unknown>,
+  ): AsyncIterable<StreamingChunk>;
 }
-

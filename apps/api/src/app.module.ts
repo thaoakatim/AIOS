@@ -8,10 +8,12 @@ import { AgentsModule } from './modules/agents/agents.module';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { ToolsModule } from './modules/tools/tools.module';
+import { InfrastructureModule } from './infrastructure/infrastructure.module';
 
 @Module({
   imports: [
     PrismaModule,
+    InfrastructureModule,
     ChatModule,
     KnowledgeModule,
     PlannerModule,

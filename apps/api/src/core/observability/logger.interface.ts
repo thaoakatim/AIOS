@@ -5,4 +5,3 @@ export interface ILogger {
   debug?(message: string, ...optionalParams: any[]): void;
   verbose?(message: string, ...optionalParams: any[]): void;
 }
-

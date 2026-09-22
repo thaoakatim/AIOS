@@ -41,16 +41,16 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế và tri�
 ## 🔹 Phase 2: LLM Gateway & Hạ tầng Adapters (Sprint 1 - Anti-Corruption Layer)
 > **Mục tiêu:** Xây dựng cổng giao tiếp LLM đa nhà cung cấp và các Adapter kết nối Vector Store / Redis.
 
-- [ ] **Task 1.1: LLM Gateway & Provider Adapters (`core/llm` & `infrastructure/llm-providers`)**
+- [x] **Task 1.1: LLM Gateway & Provider Adapters (`core/llm` & `infrastructure/llm-providers`)**
   - Hiện thực `LLMClientFactory` và `OpenAIAdapter` / `GeminiAdapter` / `OllamaAdapter` kế thừa `ILLMClient`.
   - Hiện thực luồng Streaming Token (AsyncIterable $\rightarrow$ Server-Sent Events).
   - `TokenCounterService`: Đếm token và ước lượng chi phí context window.
 
-- [ ] **Task 1.2: Vector Store Adapter (`infrastructure/vector-store`)**
+- [x] **Task 1.2: Vector Store Adapter (`infrastructure/vector-store`)**
   - Interface `IVectorStore` (`upsert`, `searchSimilarity`, `delete`).
   - Hiện thực `QdrantAdapter` (kết nối Qdrant REST/gRPC) và `PgVectorAdapter` (dùng native extension của Postgres).
 
-- [ ] **Task 1.3: Redis & Storage Adapters (`infrastructure/`)**
+- [x] **Task 1.3: Redis & Storage Adapters (`infrastructure/`)**
   - `RedisService`: Quản lý cache session, pub/sub realtime, rate limiting.
   - Cấu hình **BullMQ** cho tác vụ bất đồng bộ (Chunking tài liệu, background workflow).
   - `LocalStorageService`: Lưu trữ file nhị phân tải lên (PDF, DOCX, MD) tại `./data/storage`.
