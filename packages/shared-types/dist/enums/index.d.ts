@@ -22,4 +22,13 @@ export declare enum DocumentStatus {
     INDEXED = "indexed",
     FAILED = "failed"
 }
+export declare enum MemoryScope {
+    GLOBAL = "global",
+    CONVERSATION = "conversation"
+}
+export declare enum MemoryCategory {
+    PROFILE = "profile",
+    PREFERENCE = "preference",
+    FACT = "fact"
+}
 //# sourceMappingURL=index.d.ts.map

@@ -25,3 +25,14 @@ export enum DocumentStatus {
     INDEXED = 'indexed',
     FAILED = 'failed',
 }
+
+export enum MemoryScope {
+    GLOBAL = 'global',
+    CONVERSATION = 'conversation',
+}
+
+export enum MemoryCategory {
+    PROFILE = 'profile',
+    PREFERENCE = 'preference',
+    FACT = 'fact',
+}

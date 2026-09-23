@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DocumentStatus = exports.TaskStatus = exports.AgentRunStatus = exports.MessageRole = void 0;
+exports.MemoryCategory = exports.MemoryScope = exports.DocumentStatus = exports.TaskStatus = exports.AgentRunStatus = exports.MessageRole = void 0;
 var MessageRole;
 (function (MessageRole) {
     MessageRole["USER"] = "user";
@@ -29,4 +29,15 @@ var DocumentStatus;
     DocumentStatus["INDEXED"] = "indexed";
     DocumentStatus["FAILED"] = "failed";
 })(DocumentStatus || (exports.DocumentStatus = DocumentStatus = {}));
+var MemoryScope;
+(function (MemoryScope) {
+    MemoryScope["GLOBAL"] = "global";
+    MemoryScope["CONVERSATION"] = "conversation";
+})(MemoryScope || (exports.MemoryScope = MemoryScope = {}));
+var MemoryCategory;
+(function (MemoryCategory) {
+    MemoryCategory["PROFILE"] = "profile";
+    MemoryCategory["PREFERENCE"] = "preference";
+    MemoryCategory["FACT"] = "fact";
+})(MemoryCategory || (exports.MemoryCategory = MemoryCategory = {}));
 //# sourceMappingURL=index.js.map
