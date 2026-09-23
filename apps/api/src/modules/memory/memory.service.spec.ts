@@ -1,29 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { MemoryRepository } from './memory.repository';
 import { MemoryService } from './memory.service';
 
 describe('MemoryService', () => {
   let service: MemoryService;
 
-  const prismaMock = {
-    memoryRecord: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      count: jest.fn(),
-    },
-    agentSession: {
-      findUnique: jest.fn(),
-    },
+  const repositoryMock = {
+    create: jest.fn(),
+    findById: jest.fn(),
+    findByKey: jest.fn(),
+    findManyAndCount: jest.fn(),
+    findRecallCandidates: jest.fn(),
+    update: jest.fn(),
+    deleteById: jest.fn(),
+    agentSessionExists: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MemoryService,
-        { provide: PrismaService, useValue: prismaMock },
+        { provide: MemoryRepository, useValue: repositoryMock },
       ],
     }).compile();
 
@@ -56,7 +53,7 @@ describe('MemoryService', () => {
 
   it('recall ranks keyword-matching records first', async () => {
     const now = new Date();
-    prismaMock.memoryRecord.findMany.mockResolvedValue([
+    repositoryMock.findRecallCandidates.mockResolvedValue([
       {
         id: 'id-1',
         sourceAgentSessionId: null,
@@ -85,7 +82,7 @@ describe('MemoryService', () => {
   });
 
   it('getRelevantMemory accepts an AgentExecutionContext', async () => {
-    prismaMock.memoryRecord.findMany.mockResolvedValue([]);
+    repositoryMock.findRecallCandidates.mockResolvedValue([]);
     const result = await service.getRelevantMemory({
       executionId: 'exec-1',
       sessionId: '123e4567-e89b-12d3-a456-426614174000',
@@ -95,12 +92,12 @@ describe('MemoryService', () => {
       metadata: {},
     });
     expect(result).toEqual([]);
-    expect(prismaMock.memoryRecord.findMany).toHaveBeenCalled();
+    expect(repositoryMock.findRecallCandidates).toHaveBeenCalled();
   });
 
   it('upsert creates when key does not exist', async () => {
-    prismaMock.memoryRecord.findUnique.mockResolvedValue(null);
-    prismaMock.memoryRecord.create.mockResolvedValue({
+    repositoryMock.findByKey.mockResolvedValue(null);
+    repositoryMock.create.mockResolvedValue({
       id: 'new-id',
       sourceAgentSessionId: null,
       scope: 'global',
@@ -120,7 +117,7 @@ describe('MemoryService', () => {
   });
 
   it('create throws Conflict when key already exists', async () => {
-    prismaMock.memoryRecord.findUnique.mockResolvedValue({ id: 'x' });
+    repositoryMock.findByKey.mockResolvedValue({ id: 'x' });
     await expect(
       service.create({ key: 'a', value: 'b', category: 'fact' }),
     ).rejects.toThrow('đã tồn tại');

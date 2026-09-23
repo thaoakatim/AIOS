@@ -5,13 +5,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { MemoryRecord, Prisma } from '@prisma/client';
+// Type-only import phục vụ chấm điểm relevance — service KHÔNG truy vấn DB.
+import { MemoryRecord } from '@prisma/client';
 import { AgentExecutionContext } from '../../core/context/agent-context.interface';
-import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateMemoryDto } from './dto/create-memory.dto';
 import { QueryMemoryDto, RelevantMemoryQueryDto } from './dto/query-memory.dto';
 import { UpdateMemoryDto } from './dto/update-memory.dto';
 import { Memory, MemoryListResult } from './entities/memory.entity';
+import { MemoryRepository } from './memory.repository';
 
 /** Danh mục & phạm vi hợp lệ — đồng bộ với Prisma schema + shared-types. */
 export const MEMORY_CATEGORIES = ['profile', 'preference', 'fact'] as const;
@@ -31,9 +32,11 @@ export interface GetRelevantMemoryOptions {
 }
 
 /**
- * MemoryService — CRUD ký ức dài hạn + truy hồi liên quan cho Agent.
+ * MemoryService — business logic ký ức dài hạn + truy hồi liên quan cho Agent.
  *
- * - Lưu trữ: PostgreSQL qua Prisma (`memory_records`), key duy nhất toàn cục.
+ * Quy ước tầng: Service KHÔNG tương tác trực tiếp với database.
+ * Mọi truy vấn persistence đều đi qua MemoryRepository.
+ *
  * - Provenance: `sourceAgentSessionId` nullable, trỏ tới `agent_sessions`
  *   (null khi user tạo tay qua Dashboard).
  * - `getRelevantMemory(ctx)` là điểm tích hợp chính cho Task 2.3 (Chat Context
@@ -43,7 +46,7 @@ export interface GetRelevantMemoryOptions {
 export class MemoryService {
   private readonly logger = new Logger(MemoryService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly memoryRepository: MemoryRepository) {}
 
   // ---------------------------------------------------------------- CRUD --
 
@@ -56,17 +59,19 @@ export class MemoryService {
       dto.sourceAgentSessionId,
     );
 
-    const existing = await this.prisma.memoryRecord.findUnique({
-      where: { key },
-    });
+    const existing = await this.memoryRepository.findByKey(key);
     if (existing) {
       throw new ConflictException(
         `Memory với key "${key}" đã tồn tại. Dùng PATCH /memory/${existing.id} hoặc POST /memory/upsert để cập nhật.`,
       );
     }
 
-    const created = await this.prisma.memoryRecord.create({
-      data: { key, value, category, scope, sourceAgentSessionId },
+    const created = await this.memoryRepository.create({
+      key,
+      value,
+      category,
+      scope,
+      sourceAgentSessionId,
     });
     this.logger.log(`Tạo memory mới: key="${key}" category="${category}"`);
     return Memory.fromPrisma(created);
@@ -80,9 +85,7 @@ export class MemoryService {
     dto: CreateMemoryDto,
   ): Promise<{ data: Memory; created: boolean }> {
     const key = this.normalizeKey(dto.key);
-    const existing = await this.prisma.memoryRecord.findUnique({
-      where: { key },
-    });
+    const existing = await this.memoryRepository.findByKey(key);
     if (!existing) {
       const created = await this.create(dto);
       return { data: created, created: true };
@@ -97,30 +100,38 @@ export class MemoryService {
   }
 
   async findAll(filter: QueryMemoryDto = {}): Promise<MemoryListResult> {
-    const where = this.buildWhereClause(filter);
+    // Validate trước khi xuống repository để lỗi 400 rõ ràng thay vì lỗi DB.
+    if (filter.scope !== undefined) this.normalizeScope(filter.scope);
+    if (filter.category !== undefined) this.normalizeCategory(filter.category);
+    if (filter.sourceAgentSessionId !== undefined) {
+      this.assertUuid(filter.sourceAgentSessionId, 'sourceAgentSessionId');
+    }
     const { limit, offset } = this.normalizePagination(
       filter.limit,
       filter.offset,
     );
 
-    const [records, total] = await Promise.all([
-      this.prisma.memoryRecord.findMany({
-        where,
-        orderBy: { updatedAt: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-      this.prisma.memoryRecord.count({ where }),
-    ]);
+    const { records, total } = await this.memoryRepository.findManyAndCount({
+      scope:
+        filter.scope === undefined
+          ? undefined
+          : this.normalizeScope(filter.scope),
+      category:
+        filter.category === undefined
+          ? undefined
+          : this.normalizeCategory(filter.category),
+      search: filter.search,
+      sourceAgentSessionId: filter.sourceAgentSessionId,
+      take: limit,
+      skip: offset,
+    });
 
     return { data: Memory.fromPrismaMany(records), total };
   }
 
   async findOne(id: string): Promise<Memory> {
     this.assertUuid(id, 'id');
-    const record = await this.prisma.memoryRecord.findUnique({
-      where: { id },
-    });
+    const record = await this.memoryRepository.findById(id);
     if (!record) {
       throw new NotFoundException(`Không tìm thấy memory với id "${id}".`);
     }
@@ -129,9 +140,7 @@ export class MemoryService {
 
   async findByKey(key: string): Promise<Memory> {
     const normalized = this.normalizeKey(key);
-    const record = await this.prisma.memoryRecord.findUnique({
-      where: { key: normalized },
-    });
+    const record = await this.memoryRepository.findByKey(normalized);
     if (!record) {
       throw new NotFoundException(
         `Không tìm thấy memory với key "${normalized}".`,
@@ -142,50 +151,44 @@ export class MemoryService {
 
   async update(id: string, dto: UpdateMemoryDto): Promise<Memory> {
     this.assertUuid(id, 'id');
-    const existing = await this.prisma.memoryRecord.findUnique({
-      where: { id },
-    });
+    const existing = await this.memoryRepository.findById(id);
     if (!existing) {
       throw new NotFoundException(`Không tìm thấy memory với id "${id}".`);
     }
 
-    const data: Prisma.MemoryRecordUpdateInput = {};
-    if (dto.value !== undefined) data.value = this.normalizeValue(dto.value);
-    if (dto.category !== undefined)
-      data.category = this.normalizeCategory(dto.category);
-    if (dto.scope !== undefined) data.scope = this.normalizeScope(dto.scope);
-    if (dto.sourceAgentSessionId !== undefined) {
-      const resolved = await this.resolveSourceSession(
-        dto.sourceAgentSessionId,
-      );
-      data.sourceAgentSession =
-        resolved === null
-          ? { disconnect: true }
-          : { connect: { id: resolved } };
-    }
-
-    if (Object.keys(data).length === 0) {
+    const hasChanges =
+      dto.value !== undefined ||
+      dto.category !== undefined ||
+      dto.scope !== undefined ||
+      dto.sourceAgentSessionId !== undefined;
+    if (!hasChanges) {
       return Memory.fromPrisma(existing);
     }
 
-    const updated = await this.prisma.memoryRecord.update({
-      where: { id },
-      data,
+    const updated = await this.memoryRepository.update(id, {
+      value:
+        dto.value === undefined ? undefined : this.normalizeValue(dto.value),
+      category:
+        dto.category === undefined
+          ? undefined
+          : this.normalizeCategory(dto.category),
+      scope:
+        dto.scope === undefined ? undefined : this.normalizeScope(dto.scope),
+      sourceAgentSessionId:
+        dto.sourceAgentSessionId === undefined
+          ? undefined
+          : await this.resolveSourceSession(dto.sourceAgentSessionId),
     });
     return Memory.fromPrisma(updated);
   }
 
   async remove(id: string): Promise<Memory> {
     this.assertUuid(id, 'id');
-    const existing = await this.prisma.memoryRecord.findUnique({
-      where: { id },
-    });
+    const existing = await this.memoryRepository.findById(id);
     if (!existing) {
       throw new NotFoundException(`Không tìm thấy memory với id "${id}".`);
     }
-    const deleted = await this.prisma.memoryRecord.delete({
-      where: { id },
-    });
+    const deleted = await this.memoryRepository.deleteById(id);
     this.logger.log(`Xóa memory: key="${deleted.key}" id="${id}"`);
     return Memory.fromPrisma(deleted);
   }
@@ -202,11 +205,22 @@ export class MemoryService {
     options: GetRelevantMemoryOptions = {},
   ): Promise<Memory[]> {
     const limit = this.normalizeRelevantLimit(options.limit);
-    const where = this.buildRecallWhereClause(options);
+    const category =
+      options.category === undefined
+        ? undefined
+        : this.normalizeCategory(options.category);
+    const scope =
+      options.scope === undefined
+        ? undefined
+        : this.normalizeScope(options.scope);
+    if (options.sessionId !== undefined) {
+      this.assertUuid(options.sessionId, 'sessionId');
+    }
 
-    const candidates = await this.prisma.memoryRecord.findMany({
-      where,
-      orderBy: { updatedAt: 'desc' },
+    const candidates = await this.memoryRepository.findRecallCandidates({
+      category,
+      scope,
+      sessionId: options.sessionId,
       take: MAX_RECALL_CANDIDATES,
     });
 
@@ -333,65 +347,7 @@ export class MemoryService {
   }
 
   // ---------------------------------------------------------- Helpers --
-
-  private buildWhereClause(
-    filter: QueryMemoryDto,
-  ): Prisma.MemoryRecordWhereInput {
-    const where: Prisma.MemoryRecordWhereInput = {};
-    if (filter.scope !== undefined) {
-      where.scope = this.normalizeScope(filter.scope);
-    }
-    if (filter.category !== undefined) {
-      where.category = this.normalizeCategory(filter.category);
-    }
-    if (filter.sourceAgentSessionId !== undefined) {
-      this.assertUuid(filter.sourceAgentSessionId, 'sourceAgentSessionId');
-      where.sourceAgentSessionId = filter.sourceAgentSessionId;
-    }
-    const search = filter.search?.trim();
-    if (search) {
-      where.OR = [
-        { key: { contains: search, mode: 'insensitive' } },
-        { value: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-    return where;
-  }
-
-  /**
-   * Điều kiện truy hồi: ưu tiên ký ức global + ký ức conversation
-   * thuộc về session hiện tại. Ký ức conversation của session khác
-   * bị loại để tránh rò rỉ ngữ cảnh chéo.
-   */
-  private buildRecallWhereClause(
-    options: GetRelevantMemoryOptions,
-  ): Prisma.MemoryRecordWhereInput {
-    const where: Prisma.MemoryRecordWhereInput = {};
-    if (options.category !== undefined) {
-      where.category = this.normalizeCategory(options.category);
-    }
-    if (options.scope !== undefined) {
-      const scope = this.normalizeScope(options.scope);
-      where.scope = scope;
-      if (scope === 'conversation' && options.sessionId) {
-        this.assertUuid(options.sessionId, 'sessionId');
-        where.sourceAgentSessionId = options.sessionId;
-      }
-      return where;
-    }
-    if (options.sessionId) {
-      this.assertUuid(options.sessionId, 'sessionId');
-      where.OR = [
-        { scope: DEFAULT_SCOPE },
-        {
-          scope: 'conversation',
-          sourceAgentSessionId: options.sessionId,
-        },
-      ];
-      return where;
-    }
-    return where;
-  }
+  // Các helper dưới đây là pure logic (validation, scoring) — không chạm DB.
 
   /** Chấm điểm trùng khớp từ khóa: key khớp nặng hơn value, category nhẹ. */
   private scoreRelevance(query: string, record: MemoryRecord): number {
@@ -522,11 +478,8 @@ export class MemoryService {
     }
     const normalized = sourceAgentSessionId.trim();
     this.assertUuid(normalized, 'sourceAgentSessionId');
-    const session = await this.prisma.agentSession.findUnique({
-      where: { id: normalized },
-      select: { id: true },
-    });
-    if (!session) {
+    const exists = await this.memoryRepository.agentSessionExists(normalized);
+    if (!exists) {
       throw new NotFoundException(
         `Không tìm thấy AgentSession với id "${normalized}" (provenance).`,
       );
