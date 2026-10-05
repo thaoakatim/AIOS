@@ -1,4 +1,12 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateKnowledgeDto } from './create-knowledge.dto';
+/**
+ * DTO cập nhật metadata của tài liệu (`PATCH /knowledge/:id`).
+ *
+ * KHÔNG cho phép đổi `sourceUrl`/`fileType` — nội dung gốc chỉ thay đổi được
+ * qua luồng upload lại (tạo Document mới) để không làm lệch vector đã index.
+ */
+export class UpdateDocumentDto {
+  title?: string;
 
-export class UpdateKnowledgeDto extends PartialType(CreateKnowledgeDto) {}
+  /** Đánh dấu lại trạng thái (ví dụ đưa 'failed' về 'pending' để retry). */
+  status?: string;
+}

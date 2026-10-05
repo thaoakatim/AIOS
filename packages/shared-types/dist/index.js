@@ -17,4 +17,5 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./enums"), exports);
 __exportStar(require("./chat"), exports);
 __exportStar(require("./memory"), exports);
+__exportStar(require("./knowledge"), exports);
 //# sourceMappingURL=index.js.map

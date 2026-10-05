@@ -47,6 +47,7 @@
     "@nestjs/testing": "^11.0.1",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.3.0",
     "@types/node": "^24.0.0",
     "@types/pdf-parse": "^1.1.4",
     "@types/supertest": "^7.0.0",
@@ -74,8 +75,21 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
+    "moduleNameMapper": {
+      "^@nestjs/config$": "<rootDir>/../test/stubs/config.stub.ts",
+      "^@nestjs/mapped-types$": "<rootDir>/../test/stubs/mapped-types.stub.ts",
+      "^@core/(.*)$": "<rootDir>/core/$1",
+      "^@infrastructure/(.*)$": "<rootDir>/infrastructure/$1",
+      "^@modules/(.*)$": "<rootDir>/modules/$1",
+      "^@/(.*)$": "<rootDir>/$1"
+    },
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": "<rootDir>/../tsconfig.spec.json"
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

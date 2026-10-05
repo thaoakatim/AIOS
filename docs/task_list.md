@@ -60,15 +60,25 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế và tri�
 ## 🔹 Phase 3: Các Module Nghiệp vụ Cốt lõi (Sprint 2 - Chat, Memory, RAG)
 > **Mục tiêu:** Chatbot thông minh có khả năng nhớ sở thích và tra cứu tài liệu cá nhân.
 
-- [ ] **Task 2.1: Memory Module (`modules/memory`)**
+- [x] **Task 2.1: Memory Module (`modules/memory`)**
   - CRUD Ký ức dài hạn (`MemoryRecord`: User Profile, Preferences, Project Facts) lưu vào PostgreSQL.
   - Cung cấp method `getRelevantMemory(ctx)` để inject vào `AgentExecutionContext`.
   - Tích hợp ghi nhận nguồn gốc thông qua `sourceAgentSessionId`.
 
-- [ ] **Task 2.2: Knowledge & RAG Module (`modules/knowledge`)**
-  - Pipeline xử lý: Upload tài liệu $\rightarrow$ Text Extraction $\rightarrow$ Chunking (Recursive Splitter) $\rightarrow$ Embedding Service $\rightarrow$ Lưu Vector DB.
-  - Endpoint `POST /knowledge/upload` và `GET /knowledge/search` (Semantic Search).
-  - Hỗ trợ gắn kết nhiều tài liệu vào tin nhắn qua bảng `MessageDocument`.
+- [x] **Task 2.2: Knowledge & RAG Module (`modules/knowledge`)**
+  - **Pipeline:** `POST /knowledge/upload` → Lưu file (`LocalStorageService`) → Text Extraction (`DocumentProcessorService`) → Chunking (`RecursiveTextSplitter`) → Embedding (`EmbeddingGatewayService`) → Lưu Vector Store (`IVectorStore`).
+    - `core/llm/interfaces/embedding.interface.ts`: hợp đồng `IEmbeddingClient` (core độc lập 100% với SDK).
+    - `core/llm/embedding-gateway.service.ts`: cổng Embedding đa provider, tự chia batch, mặc định 768 chiều (khớp cột `embedding vector(768)` của `document_chunks`).
+    - `infrastructure/embedding/`: `EmbeddingClientFactory` + adapter `OpenAI` / `Gemini` / `Ollama`.
+    - `modules/knowledge/services/recursive-text-splitter.ts`: tách đệ quy theo separator (đoạn văn → dòng → câu → dấu phẩy → từ), giữ `chunkOverlap` và sinh `startOffset`/`endOffset` để trích dẫn nguồn.
+    - `KnowledgeIngestionWorker`: chạy pipeline nền qua BullMQ khi `KNOWLEDGE_PROCESSING_MODE=queue`; mặc định `sync` xử lý ngay trong request.
+  - **Endpoint `GET /knowledge/search` (Semantic Search):** query → embedding → cosine similarity → hydrate nội dung/tiêu đề tài liệu từ PostgreSQL. Hỗ trợ `limit`, `minScore`, `documentId`.
+  - **Gắn kết nhiều tài liệu vào tin nhắn (`MessageDocument`):**
+    - `POST /knowledge/messages/:messageId/documents` (idempotent, `skipDuplicates`) · `GET` · `DELETE /knowledge/messages/:messageId/documents/:documentId`.
+    - `messageIds` kèm theo khi upload để đính kèm ngay tài liệu vào tin nhắn.
+  - **Bổ sung:** `GET /knowledge/context` (RAG context sẵn sàng chèn prompt) · `GET /knowledge/:id/chunks` · `POST /knowledge/:id/reindex` · `GET /knowledge/stats`.
+  - **Điểm tích hợp cho Task 2.3:** `getRelevantChunks(ctx)` và `injectIntoContext(ctx)` nạp `ctx.prefetch.ragChunks` (tương xứng với `MemoryService.getRelevantMemory`). Khi Vector Store/Embedding lỗi, service trả `[]` và ghi cảnh báo để chat vẫn hoạt động bằng Memory + Chat History.
+  - *DoD:* 104 unit test xanh; `tsc`/`eslint`/`nest build` sạch; `KnowledgeRepository` là nơi duy nhất chạm Prisma.
 
 - [ ] **Task 2.3: Chat Module hoàn chỉnh (`modules/chat`)**
   - Endpoint `POST /chat` và `POST /chat/stream` (SSE Streaming).
@@ -132,9 +142,19 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế và tri�
 ---
 
 ### 📌 Trạng thái Hiện tại & Việc Cần làm Ngay:
-1. Chạy lệnh migrate để đẩy 14 bảng vào PostgreSQL:
+1. Khởi động hạ tầng Docker cho PostgreSQL + Redis + Qdrant:
    ```bash
+   cd docker && docker compose up -d
+   ```
+2. Tạo file `.env` cho API từ `.env.example`, rồi nạp 14 bảng:
+   ```bash
+   cp apps/api/.env.example apps/api/.env
    pnpm exec prisma migrate dev --name init
    ```
-2. Tạo `PrismaService` trong NestJS để các module sau này inject và query DB.
-3. Chuyển sang **Task 0.3** (`packages/shared-types`) và **Task 0.4** (Core Contracts & Hooks).
+   *Lưu ý:* `EMBEDDING_PROVIDER` mặc định là `ollama` — cần chạy Ollama và `ollama pull nomic-embed-text` (768 chiều). Nếu dùng OpenAI/Gemini thì đổi biến này và giữ `EMBEDDING_DIMENSIONS=768` để khớp cột `vector(768)`.
+3. Kiểm tra RAG end-to-end:
+   ```bash
+   curl -F "file=@docs/architecture.md" -F "title=Architecture" http://localhost:5002/knowledge/upload
+   curl "http://localhost:5002/knowledge/search?query=modular%20monolith&limit=5"
+   ```
+4. Chuyển sang **Task 2.3** (`modules/chat`) — ghép RAG + Memory + Chat History vào `AgentExecutionContext` qua `KnowledgeService.getRelevantChunks(ctx)` / `injectIntoContext(ctx)`.

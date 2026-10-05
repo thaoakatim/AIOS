@@ -1,8 +1,10 @@
 import { Module, Global } from '@nestjs/common';
 import { PrismaModule } from './database/prisma.module';
 import { LLMGatewayService } from '@core/llm/llm-gateway.service';
+import { EmbeddingGatewayService } from '@core/llm/embedding-gateway.service';
 import { TokenCounterService } from '@core/llm/services/token-counter.service';
 import { LLMClientFactory } from './llm-providers/llm-client.factory';
+import { EmbeddingClientFactory } from './embedding/embedding-client.factory';
 import { VectorStoreFactory } from './vector-store/vector-store.factory';
 import { QdrantAdapter } from './vector-store/qdrant.adapter';
 import { PgVectorAdapter } from './vector-store/pgvector.adapter';
@@ -18,6 +20,8 @@ import { DocumentProcessorService } from './storage/document-processor.service';
     LLMGatewayService,
     TokenCounterService,
     LLMClientFactory,
+    EmbeddingGatewayService,
+    EmbeddingClientFactory,
     VectorStoreFactory,
     QdrantAdapter,
     PgVectorAdapter,
@@ -31,6 +35,8 @@ import { DocumentProcessorService } from './storage/document-processor.service';
     LLMGatewayService,
     TokenCounterService,
     LLMClientFactory,
+    EmbeddingGatewayService,
+    EmbeddingClientFactory,
     VectorStoreFactory,
     QdrantAdapter,
     PgVectorAdapter,
