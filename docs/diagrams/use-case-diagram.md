@@ -1,12 +1,12 @@
 # Use Case Diagram — AIOS
 
-> Mô tả những hành động mà người dùng có thể thực hiện trong hệ thống AIOS.
+> Mô tả những hành động mà người dùng có thể thực hiện trong hệ thống AIOS trên cả Web App và Desktop App.
 
 ---
 
 ## Actor
 
-**Primary Actor:** `User` (Single developer / owner của hệ thống)
+* **Primary Actor:** `User` (Người dùng sở hữu hệ thống trên Web Browser hoặc Desktop App).
 
 ---
 
@@ -18,17 +18,24 @@ flowchart TD
 
     subgraph AIOS ["🖥️ AIOS System"]
 
+        subgraph AuthSync ["🔐 Identity & Sync"]
+            UC0["Sign in via Keycloak OIDC"]
+            UC_PAIR["Pair Web Client with Companion"]
+            UC_CLAIM["Claim Local Dev Data"]
+            UC_SYNC["Sync Encrypted Vault (E2EE)"]
+        end
+
         subgraph Chat ["💬 Chat Module"]
             UC1["Send Message"]
             UC2["Receive Streaming Response"]
             UC3["View Conversation History"]
         end
 
-        subgraph Knowledge ["📚 Knowledge Module"]
+        subgraph Knowledge ["📚 Knowledge Module (RAG)"]
             UC4["Upload Document\n(PDF / MD / DOCX)"]
-            UC5["Delete Document"]
-            UC6["Search Document"]
-            UC7["Ask Question on Document (RAG)"]
+            UC5["Delete Document (Tombstone)"]
+            UC6["Search Document (Semantic)"]
+            UC7["Ask Question on Document"]
         end
 
         subgraph Memory ["🧠 Memory Module"]
@@ -40,16 +47,16 @@ flowchart TD
 
         subgraph Planner ["📅 Planner Module"]
             UC12["Create Plan"]
-            UC13["Update Plan"]
+            UC13["Update Plan & Tasks"]
             UC14["Complete Plan"]
-            UC15["View Plans"]
+            UC15["View Kanban / Roadmap"]
         end
 
         subgraph Tools ["🔧 Tool Module"]
             UC16["Use Search Tool"]
             UC17["Use Weather Tool"]
             UC18["Use Calculator Tool"]
-            UC19["Use Filesystem Tool"]
+            UC19["Use Filesystem Tool (Sandbox)"]
         end
 
         subgraph Workflow ["⚙️ Workflow Module"]
@@ -59,13 +66,17 @@ flowchart TD
         end
 
         subgraph Agent ["🤖 Agent Module"]
-            UC23["Create Agent"]
-            UC24["Execute Agent"]
+            UC23["Configure Agent Persona"]
+            UC24["Execute ReAct Agent"]
             UC25["Route to Specialized Agent"]
         end
 
     end
 
+    %% User Connections
+    User --> UC0
+    User --> UC_PAIR
+    User --> UC_SYNC
     User --> UC1
     User --> UC3
     User --> UC4
@@ -73,18 +84,14 @@ flowchart TD
     User --> UC6
     User --> UC7
     User --> UC8
-    User --> UC9
-    User --> UC10
     User --> UC11
     User --> UC12
-    User --> UC13
-    User --> UC14
     User --> UC15
     User --> UC20
-    User --> UC21
-    User --> UC22
     User --> UC23
 
+    %% Flow Extensions
+    UC0 --> UC_CLAIM
     UC1 --> UC2
     UC7 --> UC6
     UC20 --> UC24
@@ -99,62 +106,39 @@ flowchart TD
 
 ## Mô tả Use Case theo nhóm
 
+### Identity & Sync
+| Use Case | Mô tả |
+|---|---|
+| Sign in via Keycloak OIDC | Đăng nhập an toàn bằng Google IdP hoặc Email thông qua Keycloak OIDC PKCE. |
+| Pair Web Client with Companion | Xác thực kết nối giữa Web App và Local Companion thông qua mã pairing và Browser PNA. |
+| Claim Local Dev Data | Nhập dữ liệu cũ đã tạo lúc offline/dev vào tài khoản Keycloak sau khi đăng nhập. |
+| Sync Encrypted Vault (E2EE) | Đồng bộ dữ liệu mã hóa đa thiết bị bằng Vault Key/Recovery Key (AES-256-GCM). |
+
 ### Chat Module
-
 | Use Case | Mô tả |
 |---|---|
-| Send Message | Người dùng gửi câu hỏi hoặc lệnh cho AI |
-| Receive Streaming Response | AI trả lời theo dạng stream (token by token) |
-| View Conversation History | Xem lại lịch sử cuộc hội thoại |
+| Send Message | Người dùng gửi tin nhắn hoặc yêu cầu cho AI. |
+| Receive Streaming Response | Nhận phản hồi dạng stream token qua Server-Sent Events (SSE). |
+| View Conversation History | Xem lại lịch sử các phiên hội thoại trước đó. |
 
-### Knowledge Module
-
+### Knowledge Module (RAG)
 | Use Case | Mô tả |
 |---|---|
-| Upload Document | Tải lên tài liệu PDF, Markdown, DOCX |
-| Delete Document | Xoá tài liệu đã upload |
-| Search Document | Tìm kiếm trong kho tài liệu |
-| Ask Question on Document | Đặt câu hỏi và AI trả lời dựa trên nội dung tài liệu (RAG) |
+| Upload Document | Tải lên tài liệu (PDF, MD, DOCX), kích hoạt pipeline trích xuất và sinh vector nhúng. |
+| Delete Document | Xóa mềm tài liệu (tạo Tombstone cho E2EE Sync). |
+| Search Document | Tìm kiếm tương đồng ngữ nghĩa trong kho tài liệu thông qua `pgvector`. |
+| Ask Question on Document | Hỏi đáp dựa trên nội dung tài liệu với trích dẫn grounded rõ ràng. |
 
 ### Memory Module
-
 | Use Case | Mô tả |
 |---|---|
-| Save Memory | Lưu thông tin quan trọng vào bộ nhớ dài hạn |
-| Update Memory | Cập nhật thông tin đã lưu |
-| Delete Memory | Xoá ký ức không còn cần thiết |
-| View Memories | Xem danh sách các ký ức được lưu |
+| Save / Update Memory | Lưu và cập nhật thông tin dài hạn theo cặp `(userId, key)` và danh mục. |
+| Delete Memory | Xóa mềm ký ức (Tombstone). |
+| View Stored Memories | Xem danh sách ký ức trên giao diện Memory Board. |
 
-### Planner Module
-
+### Planner, Workflow & Agents
 | Use Case | Mô tả |
 |---|---|
-| Create Plan | Tạo kế hoạch mới (task, roadmap) |
-| Update Plan | Cập nhật tiến độ kế hoạch |
-| Complete Plan | Đánh dấu kế hoạch hoàn thành |
-| View Plans | Xem danh sách kế hoạch hiện tại |
-
-### Tool Module
-
-| Use Case | Mô tả |
-|---|---|
-| Use Search Tool | AI dùng công cụ tìm kiếm web |
-| Use Weather Tool | AI truy vấn thông tin thời tiết |
-| Use Calculator | AI thực hiện tính toán |
-| Use Filesystem Tool | AI đọc/ghi file hệ thống |
-
-### Workflow Module
-
-| Use Case | Mô tả |
-|---|---|
-| Execute Workflow | Chạy một quy trình nhiều bước liên tiếp |
-| Resume Workflow | Tiếp tục workflow bị tạm dừng |
-| Cancel Workflow | Huỷ workflow đang chạy |
-
-### Agent Module
-
-| Use Case | Mô tả |
-|---|---|
-| Create Agent | Tạo agent chuyên biệt mới |
-| Execute Agent | Kích hoạt một agent để thực hiện nhiệm vụ |
-| Route to Agent | Hệ thống tự định tuyến đến agent phù hợp |
+| View Kanban / Roadmap | Quản lý kế hoạch công việc và lộ trình tiến độ. |
+| Execute Workflow | Chạy quy trình tự động hóa nhiều bước có lưu vết trạng thái để Pause/Resume. |
+| Execute ReAct Agent | Kích hoạt chu trình suy luận tự trị `Reason → Act → Reflect` có Policy Guard kiểm duyệt công cụ. |

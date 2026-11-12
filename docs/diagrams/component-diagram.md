@@ -1,289 +1,233 @@
 # Component Diagram — AIOS
 
-> Mô tả cách các module giao tiếp với nhau trong hệ thống AIOS, bao gồm luồng dữ liệu, interface, và tích hợp với hạ tầng.
+> Mô tả chi tiết cấu trúc thành phần, luồng dữ liệu, interface và các điểm tích hợp hạ tầng trong hệ thống AIOS theo kiến trúc **Modular Monolith & Clean Architecture (Zero-Daemon trên Desktop)**.
 
 ---
 
-## High-Level Component Diagram
+## 1. High-Level Component Diagram
 
 ```mermaid
 graph TD
-    User(["👤 User"])
+    User(["👤 User (Browser / Desktop)"])
 
-    subgraph APILayer ["API Layer"]
-        HTTP["REST API\n(NestJS HTTP)"]
-        WS["WebSocket\n(Streaming)"]
+    subgraph Clients ["Client Layer"]
+        WEB["🌐 React Web App\n(HTTPS Browser)"]
+        DESK_MAIN["🖥️ Electron Main\n(Sidecar Lifecycle, Ports)"]
+        DESK_REN["🖼️ Electron Renderer\n(Desktop UI)"]
+    end
+
+    subgraph SecurityLayer ["Security & Ingress Layer (127.0.0.1)"]
+        PNA["🔒 PNA & CORS Middleware\n(Private Network Access)"]
+        AUTH_GUARD["🛡️ AIOSAuthGuard\n(Keycloak JWT / Dev Bypass)"]
     end
 
     subgraph CoreModules ["Core Business Modules"]
-        CONV["💬 Conversation\nModule"]
-        KNOW["📚 Knowledge\nModule (RAG)"]
-        MEM["🧠 Memory\nModule"]
-        PLAN["📅 Planner\nModule"]
-        TOOL["🔧 Tool\nModule"]
-        WORK["⚙️ Workflow\nModule"]
-        AGENT["🤖 Agent\nModule"]
+        AUTH["🔑 Auth Module\n(@CurrentUser, Pairing, Claim)"]
+        CONV["💬 Chat Module\n(Orchestration, SSE)"]
+        KNOW["📚 Knowledge Module\n(RAG, Ingestion)"]
+        MEM["🧠 Memory Module\n(Long-term Profile)"]
+        PLAN["📅 Planner Module\n(Kanban, Tasks)"]
+        WORK["⚙️ Workflow Module\n(DAG Engine)"]
+        AGENT["🤖 Agents Module\n(ReAct Runner)"]
+        TOOL["🔧 Tools Module\n(Registry, MCP Client)"]
+        SYNC["🔄 Sync Module\n(E2EE Sync Engine)"]
     end
 
-    subgraph CoreServices ["Core Services"]
-        LLM["🔮 LLM Gateway"]
-        OBS["📊 Observability"]
+    subgraph CoreDomain ["Core Domain & Contracts (Caremate)"]
+        CTX["📦 AgentExecutionContext\n(Immutable & userId)"]
+        HOOK["🪝 Lifecycle Hook Engine\n(Pipeline & Policy Guard)"]
+        LLM["🔮 LLM Gateway (ACL)\n(ILLMClient, IEmbeddingClient)"]
+        QUEUE["📬 IJobQueue Contract\n(Queue Abstraction)"]
+        OBS["📊 Observability\n(Tracing, Token Counter)"]
     end
 
-    subgraph Infrastructure ["Infrastructure Layer"]
-        DB[("🗄️ PostgreSQL")]
-        VEC[("🧮 Vector Store\n(Qdrant/pgvector)")]
-        FS[("📁 File Storage\n(Local)")]
-        CACHE[("⚡ Redis\n(Cache)")]
+    subgraph DesktopInfra ["Desktop Local Data Plane (Zero-Daemon)"]
+        PGLITE[("🐘 PGlite WASM (In-Process)\n• Relational DB\n• Bundled pgvector (768d)\n• SQL Job Queue")]
+        FS[("📁 Local App Data\n(userData/profile)")]
     end
 
-    subgraph External ["External Services"]
-        LLMAPI["OpenAI / Anthropic\n/ Gemini API"]
-        SEARCH["Search API\n(Tavily/Google)"]
-        WEATHER["Weather API"]
-        GITHUB["GitHub API"]
-        EMAIL["Email API"]
+    subgraph DevInfra ["Dev Infrastructure (Docker Compose)"]
+        PG[("🗄️ PostgreSQL 16")]
+        QD[("🧮 Qdrant Vector DB")]
+        REDIS[("⚡ Redis / BullMQ")]
     end
 
-    %% User → API
-    User -- "HTTP Request" --> HTTP
-    User -- "WebSocket" --> WS
+    subgraph RemoteCloud ["Remote Cloud Services"]
+        KC["🔐 Keycloak OIDC\n(Google IdP)"]
+        SYNC_API["☁️ Sync API & Object Storage\n(E2EE Ciphertext Only)"]
+        LLM_API["☁️ LLM Providers\n(OpenAI / Gemini / Anthropic)"]
+    end
 
-    %% API → Conversation
-    HTTP --> CONV
-    WS --> CONV
+    %% Client flows
+    User --> WEB
+    User --> DESK_REN
+    DESK_MAIN -- "Spawn & Monitor Sidecar" --> PNA
+    WEB -- "PNA + Scoped Token" --> PNA
+    DESK_REN -- "Local Loopback HTTP" --> PNA
+    PNA --> AUTH_GUARD
+    AUTH_GUARD --> AUTH
 
-    %% Conversation → downstream
-    CONV -- "context + messages" --> LLM
-    CONV -- "RAG query" --> KNOW
-    CONV -- "read profile" --> MEM
-    CONV -- "delegate task" --> AGENT
+    %% Business Modules interaction
+    AUTH_GUARD --> CONV
+    AUTH_GUARD --> KNOW
+    AUTH_GUARD --> MEM
+    AUTH_GUARD --> PLAN
+    AUTH_GUARD --> WORK
+    AUTH_GUARD --> AGENT
 
-    %% Knowledge → infra
-    KNOW -- "store doc" --> FS
-    KNOW -- "store/search vectors" --> VEC
-    KNOW -- "embed text" --> LLM
+    CONV -- "Create Context & Execute" --> CTX
+    CTX --> HOOK
+    HOOK -- "Enrich Memory" --> MEM
+    HOOK -- "Enrich RAG Chunks" --> KNOW
+    HOOK -- "Policy Guard" --> TOOL
 
-    %% Memory → infra
-    MEM -- "persist" --> DB
+    CONV -- "Prompt & Stream" --> LLM
+    AGENT -- "Reason & Tool Call" --> LLM
+    AGENT -- "Execute Tool" --> TOOL
+    WORK -- "Enqueue Steps" --> QUEUE
 
-    %% Planner → infra
-    PLAN -- "persist" --> DB
+    %% Infrastructure bindings
+    CONV & MEM & PLAN & WORK & KNOW -->|Prisma| PGLITE
+    KNOW -- "Vector Search" --> PGLITE
+    QUEUE -. Desktop Adapter .-> PGLITE
+    KNOW -- "File Store" --> FS
+    SYNC -->|E2EE Envelopes| SYNC_API
 
-    %% Tool → external
-    TOOL -- "web search" --> SEARCH
-    TOOL -- "weather query" --> WEATHER
-    TOOL -- "code/file ops" --> FS
-    TOOL -- "repo access" --> GITHUB
-    TOOL -- "send/read mail" --> EMAIL
-
-    %% Workflow → siblings
-    WORK -- "execute tool" --> TOOL
-    WORK -- "delegate step" --> AGENT
-    WORK -- "persist state" --> DB
-
-    %% Agent → siblings
-    AGENT -- "call model" --> LLM
-    AGENT -- "use tool" --> TOOL
-    AGENT -- "run sub-workflow" --> WORK
-
-    %% LLM → external
-    LLM -- "API call" --> LLMAPI
-
-    %% Observability
-    CONV -. "trace" .-> OBS
-    LLM -. "token usage / latency" .-> OBS
-    TOOL -. "tool call log" .-> OBS
-    AGENT -. "agent session log" .-> OBS
-    WORK -. "workflow run log" .-> OBS
-
-    %% Cache
-    CONV -- "session cache" --> CACHE
+    %% External
+    AUTH -. Verify Token .-> KC
+    LLM --> LLM_API
+    HOOK -. Telemetry .-> OBS
 ```
 
 ---
 
-## Sequence Diagram — Chat với RAG
+## 2. Sequence Diagram — Chat với RAG, Memory & Lifecycle Hooks
 
 ```mermaid
 sequenceDiagram
-    actor User
-    participant API as REST/WS API
-    participant Conv as Conversation Module
-    participant Mem as Memory Module
-    participant Know as Knowledge Module
-    participant LLM as LLM Gateway
-    participant OBS as Observability
+    autonumber
+    actor User as 👤 Người dùng
+    participant API as 🌐 ChatController
+    participant Guard as 🛡️ AIOSAuthGuard
+    participant Svc as 💬 ChatService
+    participant Hook as 🪝 Lifecycle Hook Pipeline
+    participant Mem as 🧠 MemoryModule
+    participant Know as 📚 KnowledgeModule (RAG)
+    participant LLM as 🔮 LLMGateway (ACL)
+    participant DB as 🐘 PGlite (Prisma)
+    participant OBS as 📊 Observability
 
-    User->>API: POST /chat { message }
-    API->>Conv: handleMessage(message)
+    User->>API: POST /chat/stream (Bearer Token)
+    API->>Guard: canActivate(context)
+    Guard-->>API: Gắn @CurrentUser() { id, email }
+    API->>Svc: handleStreamMessage(dto, user)
 
-    Conv->>Mem: getRelevantMemory(message)
-    Mem-->>Conv: [memory items]
-
-    Conv->>Know: semanticSearch(message)
-    Know-->>Conv: [top-k document chunks]
-
-    Conv->>LLM: complete(messages + memory + chunks)
-    LLM-->>Conv: stream(token...)
-    Conv-->>API: stream response
-    API-->>User: Server-Sent Events
-
-    Conv--)OBS: trace(prompt, latency, tokens)
-```
-
----
-
-## Sequence Diagram — Agent thực hiện Task
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant API
-    participant Agent as Agent Module
-    participant LLM as LLM Gateway
-    participant Tool as Tool Module
-    participant OBS as Observability
-
-    User->>API: POST /agent/run { task }
-    API->>Agent: execute(task)
-
-    loop ReAct Loop (max N iterations)
-        Agent->>LLM: reason(task, history, tools)
-        LLM-->>Agent: thought + action (tool call)
-
-        Agent->>Tool: execute(toolName, input)
-        Tool-->>Agent: toolResult
-
-        Agent->>LLM: reflect(result)
-        LLM-->>Agent: is_done? next_action?
+    Svc->>Svc: Tạo AgentExecutionContext (userId, sessionId, query)
+    
+    rect rgb(240, 248, 255)
+    Note over Svc,Hook: Giai đoạn Immutable Hook: onBeforePromptBuild
+    Svc->>Hook: onBeforePromptBuild(ctx)
+    par Đọc Ký ức và Tìm kiếm Vector đồng thời theo userId
+        Hook->>Mem: getRelevantMemory(ctx.query, ctx.userId)
+        Mem-->>Hook: [User Preferences, Facts]
+    and
+        Hook->>Know: searchRelevantChunks(ctx.query, ctx.userId)
+        Know-->>Hook: [DocumentChunk 1, 2, 3]
+    end
+    Hook->>Hook: Clone & nạp Memory + RAG vào ctx.prefetch
+    Hook-->>Svc: ctx mới (Enriched Context)
     end
 
-    Agent-->>API: finalResult
-    API-->>User: response
-    Agent--)OBS: log(session, steps, tokens)
+    Svc->>LLM: streamComplete(ctx)
+    LLM->>LLM: PromptBuilder: Ghép SystemPrompt + History + RAG + Memory
+    LLM-->>Svc: Luồng AsyncIterable Token Stream
+    
+    loop Từng Token
+        Svc-->>API: Server-Sent Event (SSE)
+        API-->>User: Hiển thị Token realtime
+    end
+
+    LLM-->>Svc: Kết thúc Stream (TokenUsage, Latency)
+    
+    par Lưu dữ liệu & Đo lường
+        Svc->>DB: Lưu Message (kèm userId, version=1, softDelete=null)
+    and
+        Svc->>Hook: onAfterCompletion(response, ctx)
+        Hook--)OBS: Ghi log Trace (Token, Latency, ExecutionId)
+    end
 ```
 
 ---
 
-## Sequence Diagram — Workflow Execution
+## 3. Sequence Diagram — Agent ReAct Loop & Policy Guard
 
 ```mermaid
 sequenceDiagram
-    actor User
-    participant API
-    participant WFEngine as Workflow Engine
-    participant Agent as Agent Module
-    participant Tool as Tool Module
-    participant DB as PostgreSQL
+    autonumber
+    actor User as 👤 Người dùng
+    participant API as 🌐 AgentsController
+    participant Agent as 🤖 AgentsService (ReAct)
+    participant Hook as 🪝 Policy Guard (onBeforeToolExecution)
+    participant LLM as 🔮 LLMGateway
+    participant Tool as 🔧 ToolsModule (MCP Client)
+    participant OBS as 📊 Observability
 
-    User->>API: POST /workflow/run { workflowId }
-    API->>WFEngine: execute(workflow)
-    WFEngine->>DB: saveState(RUNNING)
+    User->>API: POST /agents/run { task }
+    API->>Agent: execute(task, currentUser)
 
-    loop For each Step
-        alt Step is ToolCall
-            WFEngine->>Tool: execute(step)
-            Tool-->>WFEngine: result
-        else Step is AgentTask
-            WFEngine->>Agent: execute(step)
-            Agent-->>WFEngine: result
+    loop Vòng lặp ReAct (Tối đa maxIterations)
+        Agent->>LLM: Suy luận (Task, History, ToolSchemas)
+        LLM-->>Agent: Thought + Action (ToolCall: name, args)
+
+        alt Có yêu cầu gọi Tool
+            Agent->>Hook: onBeforeToolExecution(toolName, args, ctx)
+            Note over Hook: Policy Guard: Kiểm tra quyền sở hữu (ctx.userId) & mức độ an toàn
+            Hook-->>Agent: Phê duyệt (Approved)
+
+            Agent->>Tool: execute(toolName, args)
+            Tool-->>Agent: ToolResult
+
+            Agent->>Hook: onAfterToolExecution(toolName, result, ctx)
+            Agent->>LLM: Gửi ToolResult để Reflection (Đánh giá)
+        else Hoàn thành nhiệm vụ (isFinish = true)
+            Note over Agent: Thoát vòng lặp
         end
-        WFEngine->>DB: saveStepResult(result)
     end
 
-    WFEngine->>DB: saveState(DONE)
-    WFEngine-->>API: workflowResult
-    API-->>User: response
+    Agent->>Hook: onAfterCompletion(result, ctx)
+    Hook--)OBS: Ghi log AgentRun
+    Agent-->>API: Kết quả tổng hợp
+    API-->>User: Phản hồi hoàn tất
 ```
 
 ---
 
-## Interface Contract giữa các Module
-
-### Conversation → LLM Gateway
-
-```typescript
-interface LLMRequest {
-  model: string;
-  messages: Array<{ role: 'user' | 'assistant' | 'tool'; content: string }>;
-  tools?: ToolSchema[];
-  stream: boolean;
-  temperature?: number;
-}
-
-interface LLMResponse {
-  content: string;
-  toolCalls?: ToolCall[];
-  usage: { promptTokens: number; completionTokens: number };
-  finishReason: 'stop' | 'tool_calls' | 'length';
-}
-```
-
-### Agent → Tool Module
-
-```typescript
-interface ToolExecutionRequest {
-  toolName: string;
-  input: Record<string, unknown>;
-  callerAgentId?: string;
-}
-
-interface ToolExecutionResult {
-  success: boolean;
-  output: unknown;
-  error?: string;
-  latencyMs: number;
-}
-```
-
-### Workflow → WorkflowStep
-
-```typescript
-interface WorkflowStep {
-  id: string;
-  name: string;
-  type: 'tool' | 'agent' | 'condition' | 'parallel';
-  config: Record<string, unknown>;
-  dependsOn?: string[];  // step IDs
-}
-
-interface StepResult {
-  stepId: string;
-  status: 'success' | 'failed' | 'skipped';
-  output: unknown;
-  duration: number;
-}
-```
-
----
-
-## Deployment View
+## 4. Deployment View: Desktop Zero-Daemon vs Cloud
 
 ```mermaid
 graph LR
-    subgraph SingleServer ["Single Server (Phase 1)"]
-        NestJS["NestJS App\n(All Modules)"]
-        PG[("PostgreSQL")]
-        RD[("Redis")]
-        QD[("Qdrant\nor pgvector")]
-        FILES["Local File\nStorage"]
+    subgraph DesktopMachine ["Máy tính người dùng (Desktop Production)"]
+        direction TB
+        ELECTRON["Electron Shell\n(Main Process)"]
+        
+        subgraph SidecarProcess ["NestJS Sidecar (Duy nhất 1 Process)"]
+            APP["NestJS App\n(All Business Modules)"]
+            PGLITE_EMBED[("🐘 PGlite WASM\n(Relational + pgvector + Queue)")]
+            APP ---|In-Process WASM| PGLITE_EMBED
+        end
+        
+        DATA_DIR["📁 OS Application Data Root\n(userData/profile)"]
+        ELECTRON -->|Spawn & Healthcheck| SidecarProcess
+        PGLITE_EMBED -->|Read/Write SQLite-like Files| DATA_DIR
     end
 
-    subgraph ExternalCloud ["External (Cloud APIs)"]
-        OAIAPI["OpenAI API"]
-        TAVILY["Tavily Search"]
-        WX["Weather API"]
+    subgraph CloudServices ["Hạ tầng Đám mây (Remote Cloud)"]
+        KEYCLOAK["🔐 Keycloak Identity\n(OIDC Server + Google IdP)"]
+        SYNC_SERVER["☁️ Sync API & Object Storage\n(Ciphertext Sync Envelopes)"]
+        LLM_HOSTED["☁️ LLM Provider APIs\n(OpenAI / Gemini / Anthropic)"]
     end
 
-    NestJS --- PG
-    NestJS --- RD
-    NestJS --- QD
-    NestJS --- FILES
-    NestJS --> OAIAPI
-    NestJS --> TAVILY
-    NestJS --> WX
+    SidecarProcess -. "Xác thực JWT" .-> KEYCLOAK
+    SidecarProcess -->|"E2EE Sync (AES-256-GCM)"| SYNC_SERVER
+    SidecarProcess -->|"Prompt & RAG Context"| LLM_HOSTED
 ```
-
-> **Phase 1:** Monolith trên một server duy nhất.
-> **Phase 2+:** Có thể tách `Knowledge`, `Workflow`, `Agent` thành microservice khi cần scale.

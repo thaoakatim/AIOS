@@ -143,21 +143,15 @@ Mục tiêu là xây dựng một AI Agent có khả năng:
 
 # 4. Target User
 
-## Giai đoạn 1
+## Giai đoạn 1 & Định hướng Cá nhân
 
-Đối tượng sử dụng:
+Đối tượng sử dụng: **Người dùng cá nhân (Personal Chief of Staff)**.
 
-**Chỉ một người dùng duy nhất.**
+Hệ thống tập trung tối đa vào trải nghiệm cá nhân hóa sâu sắc, không xây dựng theo mô hình SaaS công cộng thương mại.
 
-Chính là người phát triển hệ thống.
-
-Không xây dựng:
-
-* SaaS
-* Multi-Tenant
-* Multi-User
-
-Điều này giúp giảm đáng kể độ phức tạp trong giai đoạn đầu.
+> [!NOTE]
+> **Tiến hóa về Topology & Multi-device:**  
+> Dù là Personal AI, để đáp ứng mô hình **Web App + Electron Desktop App + Local Companion** và cơ chế **End-to-End Encrypted Sync** đa thiết bị, hệ thống đã chuẩn hóa trường định danh sở hữu (`userId`) và phân tầng xác thực qua Keycloak OIDC ngay từ giai đoạn nền tảng (xem chi tiết tại [docs/architecture.md](architecture.md)). Điều này đảm bảo an toàn dữ liệu và khả năng đồng bộ mà không phá vỡ tính riêng tư (Zero-Knowledge).
 
 ---
 
@@ -403,20 +397,16 @@ Hệ thống cần ghi nhận:
 
 # 9. Project Constraints
 
-Trong giai đoạn đầu, **không triển khai**:
+Trong phạm vi MVP, **không triển khai**:
 
-* Authentication
-* Authorization
-* Payment
-* SaaS
-* Multi-Tenant
-* Microservices
+* Payment / Billing
+* Multi-tenant SaaS thương mại
+* Microservices phân tán phức tạp
 * Kubernetes
-* Mobile Application
+* Mobile Application (chỉ tập trung Web & Electron Desktop)
 
-Mục tiêu duy nhất là:
-
-> Tập trung vào AI Engineering và AI Agent Architecture.
+> [!NOTE]
+> Xác thực (Authentication) thông qua Keycloak OIDC và phân quyền theo quyền sở hữu dữ liệu (`userId`) được đưa vào nhằm phục vụ việc ghép nối Web App - Local Companion và đồng bộ mã hóa đầu-cuối (E2EE Sync), chứ không nhằm mục đích biến AIOS thành SaaS đa người dùng công cộng.
 
 ---
 

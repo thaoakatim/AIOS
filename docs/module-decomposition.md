@@ -1,68 +1,78 @@
 # Module Decomposition — AIOS
 
-> Tài liệu phân rã hệ thống **AIOS (Personal AI Operating System)** dựa trên cấu trúc thực tế của dự án (**pnpm Monorepo: NestJS API + React Web + Docker Infrastructure**).  
-> Mục tiêu: Xác định ranh giới trách nhiệm rõ ràng cho từng module, đảm bảo tính độc lập (High Cohesion, Loose Coupling) theo Domain-Driven Design (DDD), sẵn sàng mở rộng và kiểm thử độc lập.
+> Tài liệu phân rã hệ thống **AIOS (Personal AI Operating System)** dựa trên cấu trúc thực tế của dự án (**pnpm Monorepo: NestJS API + React Web + Electron Desktop + PGlite Zero-Daemon**).  
+> Mục tiêu: Xác định ranh giới trách nhiệm rõ ràng cho từng module, đảm bảo tính độc lập (High Cohesion, Loose Coupling) theo Domain-Driven Design (DDD), sẵn sàng mở rộng, kiểm thử và đồng bộ E2EE an toàn.
 
 ---
 
 ## 1. Cấu trúc Tổng thể Dự án (Project Monorepo Structure)
 
-Hệ thống được tổ chức dưới dạng monorepo quản lý bởi `pnpm`, chia tách rõ rệt giữa Backend API (`apps/api`), Frontend UI (`apps/web`), Infrastructure (`docker`) và Shared Packages (`packages/`):
+Hệ thống được tổ chức dưới dạng monorepo quản lý bởi `pnpm`, chia tách rõ rệt giữa Backend API (`apps/api`), Frontend UI (`apps/web`), Desktop Shell (`apps/desktop`), Infrastructure (`docker`) và Shared Packages (`packages/`):
 
-```
+```text
 AIOS/
 ├── apps/
-│   ├── api/                             # NestJS Backend Application
+│   ├── api/                             # NestJS Backend Application / Local Companion
 │   │   ├── src/
-│   │   │   ├── main.ts                  # Entry point (Bootstrap HTTP & WebSocket)
+│   │   │   ├── main.ts                  # Entry point (Bootstrap HTTP, PNA & WebSockets)
 │   │   │   ├── app.module.ts            # Root Module tổng hợp toàn bộ modules
 │   │   │   ├── app.controller.ts        # Health check & root endpoints
 │   │   │   ├── app.service.ts
 │   │   │   │
-│   │   │   ├── modules/                 # Business Feature Modules (Nghiệp vụ cốt lõi)
-│   │   │   │   ├── chat/                # Module Quản lý hội thoại & Streaming
-│   │   │   │   ├── knowledge/           # Module Tài liệu & RAG (Vector Search)
-│   │   │   │   ├── memory/              # Module Ký ức dài hạn (User Profile)
-│   │   │   │   ├── planner/             # Module Kế hoạch, Task & Roadmap
-│   │   │   │   ├── workflow/            # Module Workflow Engine (Multi-step DAG)
-│   │   │   │   ├── agents/              # Module Multi-Agent Orchestration & ReAct
-│   │   │   │   └── tools/               # Module Tool Registry & Execution
-│   │   │   │
-│   │   │   ├── core/                    # Core & Cross-cutting Concerns (Shared Kernel)
-│   │   │   │   ├── llm/                 # LLM Gateway (Anti-Corruption Layer)
+│   │   │   ├── core/                    # Core & Cross-cutting Contracts (Pure TS Interfaces)
+│   │   │   │   ├── context/             # AgentExecutionContext (kèm userId), ContextBuilder
+│   │   │   │   ├── hooks/               # AIOSHookHandler (Immutable Pipeline), HookRegistry
+│   │   │   │   ├── llm/                 # ILLMClient, IEmbeddingClient, PromptBuilder
+│   │   │   │   ├── queue/               # IJobQueue interface (độc lập BullMQ/pg-boss/SQL queue)
 │   │   │   │   ├── observability/       # Tracing, Token Counter, Metrics, Logger
 │   │   │   │   └── config/              # Configuration & Environment Validation
 │   │   │   │
-│   │   │   └── infrastructure/          # Tầng kết nối Hạ tầng kỹ thuật
-│   │   │       ├── database/            # PostgreSQL (Prisma ORM Client & Migrations)
-│   │   │       ├── vector-store/        # Vector Database Adapter (Qdrant / pgvector)
-│   │   │       ├── storage/             # Quản lý file nhị phân cục bộ (Local Filesystem)
-│   │   │       └── cache/               # Redis Service (Session, Cache, Rate Limit)
+│   │   │   ├── modules/                 # Business Feature Modules (Nghiệp vụ cốt lõi)
+│   │   │   │   ├── auth/                # AuthModule (Keycloak OIDC, Dual-Mode Guard, Pairing)
+│   │   │   │   ├── chat/                # Module Quản lý hội thoại & Streaming
+│   │   │   │   ├── knowledge/           # Module Tài liệu & RAG (Vector Search)
+│   │   │   │   ├── memory/              # Module Ký ức dài hạn (User Profile/Preferences)
+│   │   │   │   ├── planner/             # Module Kế hoạch, Task & Roadmap
+│   │   │   │   ├── workflow/            # Module Workflow Engine (Multi-step DAG)
+│   │   │   │   ├── agents/              # Module Multi-Agent Orchestration & ReAct
+│   │   │   │   ├── tools/               # Module Tool Registry, MCP Client & Policy Guard
+│   │   │   │   └── sync/                # Module E2EE Sync Engine, Manifests & Tombstones
+│   │   │   │
+│   │   │   └── infrastructure/          # Tầng kết nối Hạ tầng kỹ thuật (Adapters)
+│   │   │       ├── database/            # PrismaService (Hỗ trợ PGlite Desktop & Postgres Dev)
+│   │   │       ├── vector-store/        # PgVectorAdapter (Desktop) / QdrantAdapter (Dev)
+│   │   │       ├── queue/               # PgLiteQueueAdapter (Desktop) / BullMQAdapter (Dev)
+│   │   │       ├── llm-providers/       # OpenAIAdapter, GeminiAdapter, OllamaAdapter
+│   │   │       └── storage/             # Quản lý file nhị phân cục bộ (Local Filesystem)
 │   │   │
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma            # Prisma Schema (Users, Ownership & Sync Fields)
+│   │   │   └── migrations/
 │   │   ├── test/                        # E2E & Integration Tests (Jest)
-│   │   ├── nest-cli.json
-│   │   ├── tsconfig.json
 │   │   └── package.json
 │   │
-│   └── web/                             # React Frontend (Vite + TypeScript + Tailwind)
+│   ├── web/                             # React Frontend (Vite + TypeScript + Tailwind)
+│   │   ├── src/
+│   │   │   ├── components/              # Shared UI components (ChatBox, Kanban, FileViewer)
+│   │   │   ├── views/                   # Views tương ứng với các module API (Chat, Knowledge, Plan...)
+│   │   │   ├── hooks/                   # useChatStream, useAgentRun, useCompanionPairing
+│   │   │   └── stores/                  # Zustand Stores (AuthStore, SyncStore, SettingsStore)
+│   │   └── package.json
+│   │
+│   └── desktop/                         # Electron Desktop Application
 │       ├── src/
-│       │   ├── App.tsx                  # Main layout & router
-│       │   ├── main.tsx                 # Client entry point
-│       │   ├── components/              # Shared UI components
-│       │   └── views/                   # Views tương ứng với các module API (Chat, RAG, Plan...)
-│       ├── vite.config.ts
-│       ├── tsconfig.json
+│       │   ├── main/                    # Electron Main (Sidecar lifecycle, dynamic ports, OS APIs)
+│       │   ├── preload/                 # Preload Script (An toàn, không Node integration)
+│       │   └── renderer/                # Desktop UI bundle (chia sẻ code với web)
 │       └── package.json
 │
-├── docker/                              # Cấu hình container hóa hạ tầng
+├── docker/                              # Cấu hình container hóa hạ tầng (Môi trường Dev)
 │   └── docker-compose.yml               # PostgreSQL, Qdrant/pgvector, Redis
 │
-├── docs/                                # Tài liệu kỹ thuật & Kiến trúc
-│   ├── diagrams/                        # Bounded Context, Component, Domain, Use Case
-│   ├── vision-and-scope-docs.md         # Yêu cầu & Tầm nhìn hệ thống
-│   └── module-decomposition.md          # Bản đặc tả phân rã module
-│
 ├── packages/                            # Shared Libraries & Contracts dùng chung
+│   └── shared-types/                    # DTOs, Enums, Sync Envelopes dùng chung giữa API/Web/Desktop
+│
+├── docs/                                # Tài liệu kỹ thuật & Kiến trúc
 ├── pnpm-workspace.yaml                  # Khai báo Monorepo Workspace
 └── README.md
 ```
@@ -73,177 +83,151 @@ AIOS/
 
 Mỗi module nghiệp vụ trong NestJS tuân theo cấu trúc tiêu chuẩn:
 - `*.module.ts`: Khai báo module, dependency injection providers và exports.
-- `*.controller.ts`: Tiếp nhận HTTP requests, điều hướng luồng dữ liệu.
+- `*.controller.ts`: Tiếp nhận HTTP requests, kiểm tra `@CurrentUser()`.
 - `*.service.ts`: Xử lý business logic và điều phối tác vụ.
-- `dto/`: Data Transfer Objects (Validation input với class-validator).
-- `entities/`: Định nghĩa thực thể domain hoặc ORM mapping.
+- `*.repository.ts`: Tầng lưu trữ duy nhất chạm tới Prisma, bắt buộc lọc theo `userId` và `deletedAt: null`.
+- `dto/`: Data Transfer Objects (Validation input với `class-validator`).
 
 ---
 
-### 2.1. `modules/chat` — Chat & Conversation Module
+### 2.1. `modules/auth` — Auth & Identity Module
+| Thuộc tính | Chi tiết |
+|---|---|
+| **Vị trí** | `apps/api/src/modules/auth/` |
+| **Trách nhiệm** | Quản lý bảng chiếu người dùng `User`, xác thực token Keycloak OIDC, cung cấp `AIOSAuthGuard` đa chế độ, cơ chế Pairing Web-Companion qua PNA, và import/claim dữ liệu dev cũ. |
+| **Input** | Authorization Header (`Bearer <JWT>` hoặc `Bearer <PairingToken>`), Claim Data DTO. |
+| **Output** | `AuthenticatedUser` gắn vào `request.user` (chứa `id`, `email`, `keycloakSubject`). |
+| **Dependencies** | `infrastructure/database` (Prisma) |
 
+**Thành phần cốt lõi:**
+- `AIOSAuthGuard`: Global Guard hỗ trợ 2 mode: `keycloak` (xác thực JWKS từ remote Keycloak) và `dev_bypass` (tự resolve `Default Local User`).
+- `CurrentUser` Decorator: Trích xuất `AuthenticatedUser` cho Controller để truyền `userId` xuống Service/Repository.
+- `CompanionPairingService`: Xử lý sinh mã one-time pairing và cấp short-lived token cho Web App qua PNA.
+
+---
+
+### 2.2. `modules/chat` — Chat & Conversation Module
 | Thuộc tính | Chi tiết |
 |---|---|
 | **Vị trí** | `apps/api/src/modules/chat/` |
-| **Trách nhiệm** | Quản lý vòng đời cuộc hội thoại, lưu trữ tin nhắn, điều phối luồng hỏi - đáp (Orchestrator), và truyền phát (stream) token về Client. |
-| **Input** | User message payload (`CreateChatDto`), conversationId, streaming options. |
-| **Output** | Streaming response (Server-Sent Events / WebSocket) hoặc JSON Message. |
-| **Dependencies** | `core/llm`, `modules/knowledge`, `modules/memory`, `infrastructure/database` |
-
-**Cấu trúc tệp hiện tại:**
-- `chat.module.ts`: Khai báo module, inject `ChatService`.
-- `chat.controller.ts`: REST endpoints (`POST /chat`, `GET /chat`, `GET /chat/:id`).
-- `chat.service.ts`: Logic tạo conversation, append message, kết nối Memory & Knowledge để build prompt cho LLM.
-- `dto/create-chat.dto.ts`, `dto/update-chat.dto.ts`: Định dạng dữ liệu đầu vào.
-- `entities/chat.entity.ts`: Thực thể `Conversation` và `Message`.
+| **Trách nhiệm** | Quản lý vòng đời cuộc hội thoại, lưu trữ tin nhắn, điều phối luồng hỏi - đáp (Orchestrator) qua `AgentExecutionContext`, và streaming token về Client qua SSE. |
+| **Input** | User message payload (`CreateChatDto`), conversationId, streaming options, `@CurrentUser()`. |
+| **Output** | Streaming response (Server-Sent Events) hoặc JSON Message. |
+| **Dependencies** | `core/llm`, `core/context`, `core/hooks`, `modules/knowledge`, `modules/memory`, `infrastructure/database` |
 
 ---
 
-### 2.2. `modules/knowledge` — Knowledge & RAG Module
-
+### 2.3. `modules/knowledge` — Knowledge & RAG Module
 | Thuộc tính | Chi tiết |
 |---|---|
 | **Vị trí** | `apps/api/src/modules/knowledge/` |
-| **Trách nhiệm** | Tiếp nhận tài liệu (PDF, Markdown, DOCX), chia nhỏ đoạn văn bản (Chunking), tạo vector embedding và thực hiện tìm kiếm ngữ nghĩa (Semantic Search). |
-| **Input** | Upload file nhị phân, Search Query string, Top-K parameter. |
+| **Trách nhiệm** | Tiếp nhận tài liệu (PDF, Markdown, DOCX), trích xuất văn bản, chunking (`RecursiveTextSplitter`), sinh vector nhúng và tìm kiếm ngữ nghĩa theo `userId`. |
+| **Input** | Upload file nhị phân, Search Query string, Top-K parameter, `@CurrentUser()`. |
 | **Output** | Danh sách `DocumentChunk` phù hợp kèm điểm tương đồng (similarity score). |
-| **Dependencies** | `core/llm` (Embedding Service), `infrastructure/vector-store`, `infrastructure/storage` |
-
-**Cấu trúc tệp hiện tại:**
-- `knowledge.module.ts`: Quản lý upload và indexing pipeline.
-- `knowledge.controller.ts`: Endpoints upload file, xóa tài liệu, tra cứu tri thức (`POST /knowledge/upload`, `GET /knowledge/search`).
-- `knowledge.service.ts`: Điều phối pipeline: Lưu file $\rightarrow$ Parse text $\rightarrow$ Chunking $\rightarrow$ Gọi Embedding $\rightarrow$ Lưu Vector Store.
-- `dto/create-knowledge.dto.ts`, `dto/update-knowledge.dto.ts`
-- `entities/knowledge.entity.ts`: Thực thể `Document` (metadata) và `DocumentChunk`.
+| **Dependencies** | `core/llm` (Embedding Service), `core/queue` (`IJobQueue`), `infrastructure/vector-store`, `infrastructure/storage` |
 
 ---
 
-### 2.3. `modules/memory` — Long-Term Memory Module
-
+### 2.4. `modules/memory` — Long-Term Memory Module
 | Thuộc tính | Chi tiết |
 |---|---|
 | **Vị trí** | `apps/api/src/modules/memory/` |
-| **Trách nhiệm** | Lưu trữ và truy xuất thông tin dài hạn về người dùng (sở thích, thói quen, thông tin dự án, quy tắc cá nhân) theo cặp Key-Value và danh mục (Category). |
-| **Input** | Khóa (key), giá trị (value), danh mục (category, e.g. `profile`, `preference`, `project`). |
+| **Trách nhiệm** | Lưu trữ và truy xuất thông tin dài hạn về người dùng theo cặp `(userId, key)` và danh mục (`profile`, `preference`, `fact`), phục vụ nạp memory vào prompt. |
+| **Input** | Khóa (`key`), giá trị (`value`), danh mục (`category`), `@CurrentUser()`. |
 | **Output** | Danh sách Memory record hoặc Memory Profile tổng hợp. |
-| **Dependencies** | `infrastructure/database` (PostgreSQL) |
-
-**Cấu trúc tệp hiện tại:**
-- `memory.module.ts`: Khai báo MemoryModule.
-- `memory.controller.ts`: Endpoints quản lý ký ức (`POST /memory`, `GET /memory`, `PATCH /memory/:id`, `DELETE /memory/:id`).
-- `memory.service.ts`: Xử lý CRUD memory và cung cấp phương thức `getRelevantMemory(context)` cho ChatModule.
-- `dto/create-memory.dto.ts`, `dto/update-memory.dto.ts`
-- `entities/memory.entity.ts`: Thực thể `Memory` (id, key, value, category, timestamps).
+| **Dependencies** | `infrastructure/database` (PGlite/PostgreSQL) |
 
 ---
 
-### 2.4. `modules/planner` — Planner & Task Management Module
-
+### 2.5. `modules/planner` — Planner & Task Management Module
 | Thuộc tính | Chi tiết |
 |---|---|
 | **Vị trí** | `apps/api/src/modules/planner/` |
-| **Trách nhiệm** | Quản lý kế hoạch (Plan), danh sách công việc (Task) và lộ trình (Roadmap). Hỗ trợ AI tự động phân rã mục tiêu thành các bước hành động cụ thể. |
-| **Input** | Tiêu đề kế hoạch, mô tả, danh sách nhiệm vụ con, hạn hoàn thành (due date). |
-| **Output** | Trạng thái kế hoạch (`pending`, `in_progress`, `done`), danh sách task chi tiết. |
-| **Dependencies** | `infrastructure/database` (PostgreSQL) |
-
-**Cấu trúc tệp hiện tại:**
-- `planner.module.ts`: Khai báo PlannerModule.
-- `planner.controller.ts`: Endpoints quản trị plan và task (`POST /planner`, `GET /planner`, `PATCH /planner/:id`).
-- `planner.service.ts`: Xử lý logic lập kế hoạch, cập nhật trạng thái tiến độ task. Cung cấp adapter để các Agent/Tool có thể gọi cập nhật task tự động.
-- `dto/create-planner.dto.ts`, `dto/update-planner.dto.ts`
-- `entities/planner.entity.ts`: Thực thể `Plan` và `Task`.
+| **Trách nhiệm** | Quản lý kế hoạch (`Plan`), danh sách công việc (`Task`) và lộ trình (`Roadmap`) theo `userId`. Hỗ trợ phân rã sub-tasks và tự động cập nhật tiến độ bởi AI. |
+| **Input** | Tiêu đề kế hoạch, mô tả, sub-tasks, hạn hoàn thành, `@CurrentUser()`. |
+| **Output** | Trạng thái kế hoạch (`active`, `completed`), danh sách task chi tiết. |
+| **Dependencies** | `infrastructure/database` (PGlite/PostgreSQL) |
 
 ---
 
-### 2.5. `modules/workflow` — Workflow Engine Module
-
+### 2.6. `modules/workflow` — Workflow Engine Module
 | Thuộc tính | Chi tiết |
 |---|---|
 | **Vị trí** | `apps/api/src/modules/workflow/` |
-| **Trách nhiệm** | Định nghĩa, điều phối và thực thi các quy trình tự động hóa nhiều bước (Multi-step DAG / Pipeline). Hỗ trợ lưu trạng thái trung gian để có thể Pause, Resume hoặc Cancel. |
-| **Input** | Định nghĩa quy trình (Workflow Definition), Step configurations, input parameters. |
+| **Trách nhiệm** | Định nghĩa, điều phối và thực thi các quy trình tự động hóa nhiều bước (Multi-step DAG). Hỗ trợ lưu trạng thái trung gian để có thể Pause, Resume hoặc Cancel. |
+| **Input** | Workflow Definition, Step configurations, input parameters, `@CurrentUser()`. |
 | **Output** | Kết quả thực thi từng bước (`StepResult`), trạng thái cuối cùng của Workflow. |
-| **Dependencies** | `modules/agents`, `modules/tools`, `infrastructure/database` |
-
-**Cấu trúc tệp hiện tại:**
-- `workflow.module.ts`: Khai báo WorkflowModule.
-- `workflow.controller.ts`: Endpoints quản trị workflow (`POST /workflow/run`, `POST /workflow/:id/resume`, `GET /workflow/:id`).
-- `workflow.service.ts`: Máy trạng thái (State Machine) điều phối tuần tự hoặc song song các bước, ủy thác thực thi cho Tool hoặc Agent.
-- `dto/create-workflow.dto.ts`, `dto/update-workflow.dto.ts`
-- `entities/workflow.entity.ts`: Thực thể `Workflow` và `WorkflowStep`.
+| **Dependencies** | `core/queue` (`IJobQueue`), `modules/agents`, `modules/tools`, `infrastructure/database` |
 
 ---
 
-### 2.6. `modules/agents` — Multi-Agent Orchestration Module
-
+### 2.7. `modules/agents` — Multi-Agent Orchestration Module
 | Thuộc tính | Chi tiết |
 |---|---|
 | **Vị trí** | `apps/api/src/modules/agents/` |
-| **Trách nhiệm** | Quản lý và điều phối các AI Agent chuyên biệt (Research, Coding, Learning, Review). Triển khai vòng lặp suy luận ReAct Loop (Reason $\rightarrow$ Act $\rightarrow$ Reflect). |
-| **Input** | Yêu cầu nhiệm vụ (Task Prompt), Agent Role, danh sách Tools cho phép. |
+| **Trách nhiệm** | Quản lý và điều phối các AI Agent chuyên biệt (Research, Coding, Planner). Triển khai vòng lặp suy luận ReAct Loop (`Reason` → `Act` → `Reflect`). |
+| **Input** | Yêu cầu nhiệm vụ (`AgentExecutionContext`), Agent Role, danh sách Tools cho phép. |
 | **Output** | Kết quả xử lý sau quá trình tự suy luận và gọi công cụ (Tool Calls). |
-| **Dependencies** | `core/llm`, `modules/tools`, `modules/workflow` |
-
-**Cấu trúc tệp hiện tại:**
-- `agents.module.ts`: Khai báo AgentsModule.
-- `agents.controller.ts`: Endpoints điều khiển agent (`POST /agents/run`, `GET /agents/roles`).
-- `agents.service.ts`: Điều phối Agent Session, Agent Router, thực thi vòng lặp ReAct, gọi LLM suy luận và kích hoạt Tool tương ứng.
-- `dto/create-agent.dto.ts`, `dto/update-agent.dto.ts`
-- `entities/agent.entity.ts`: Thực thể `AgentConfig`, `AgentSession`, `AgentMessage`.
+| **Dependencies** | `core/llm`, `core/hooks`, `modules/tools`, `modules/workflow` |
 
 ---
 
-### 2.7. `modules/tools` — Tool Registry & Execution Module *(Đang bổ sung)*
-
+### 2.8. `modules/tools` — Tool Registry & Execution Module
 | Thuộc tính | Chi tiết |
 |---|---|
-| **Vị trí** | `apps/api/src/modules/tools/` (Tích hợp cùng Agent/Workflow) |
-| **Trách nhiệm** | Đăng ký (Register), kiểm tra hợp lệ (Validate Schema) và thực thi các công cụ bên ngoài theo tiêu chuẩn Tool Calling của LLM hoặc Model Context Protocol (MCP). |
-| **Input** | Tool Name, JSON Schema input parameters. |
+| **Vị trí** | `apps/api/src/modules/tools/` |
+| **Trách nhiệm** | Đăng ký công cụ, sinh JSON Schema cho LLM Function Calling, tích hợp Model Context Protocol (MCP) và áp dụng Policy Guard qua `onBeforeToolExecution`. |
+| **Input** | Tool Name, JSON Schema input parameters, `AgentExecutionContext`. |
 | **Output** | Dữ liệu trả về từ công cụ (`ToolResult`). |
-| **Dependencies** | External Services (Tavily/Google Search, Local Filesystem, GitHub, Weather...) |
+| **Dependencies** | External Tools (Filesystem Sandbox, GitHub API, Search API, Planner Tool) |
 
-**Thành phần cốt lõi:**
-- `ToolRegistry`: Quản lý danh sách các Tool có sẵn trong hệ thống và sinh Tool Definitions (JSON Schema) cho LLM.
-- `ToolExecutor`: Chạy tool an toàn, bắt ngoại lệ và đo đạc thời gian thực thi (Latency).
-- Built-in Tools: `SearchTool`, `CalculatorTool`, `FilesystemTool`, `WeatherTool`.
+---
+
+### 2.9. `modules/sync` — End-to-End Encrypted Sync Module
+| Thuộc tính | Chi tiết |
+|---|---|
+| **Vị trí** | `apps/api/src/modules/sync/` |
+| **Trách nhiệm** | Đóng gói dữ liệu local thành `EncryptedSyncItem` (Sync Envelopes - AES-256-GCM), xử lý đồng bộ Tombstone xóa mềm, và thực hiện Smart Vector Sync (nén `Float32Array`). |
+| **Input** | Modified local entities (Document, Message, Memory, Plan), Sync Token. |
+| **Output** | Danh sách Sync Envelopes mã hóa đẩy lên Remote Sync Storage. |
+| **Dependencies** | `infrastructure/database`, Remote Sync API |
 
 ---
 
 ## 3. Chi tiết Tầng Dùng Chung & Hạ Tầng (Core & Infrastructure)
 
-### 3.1. `core/llm` — LLM Gateway (Anti-Corruption Layer)
-* **Mục tiêu:** Cô lập toàn bộ mã nguồn nghiệp vụ khỏi các SDK bên ngoài (OpenAI, Anthropic, Gemini, Ollama).
-* **Thành phần:**
-  - `LLMClientFactory`: Khởi tạo adapter tương ứng theo cấu hình (`OpenAIAdapter`, `GeminiAdapter`, `OllamaAdapter`).
-  - `PromptBuilder`: Hỗ trợ ghép System Prompt, User Messages, Document Chunks và Tool Schemas.
-  - `StreamingAdapter`: Chuẩn hóa luồng AsyncIterable token sang định dạng SSE cho Client.
-  - `TokenCounter`: Kiểm soát giới hạn Context Window và tính toán chi phí token.
+### 3.1. `core/context` & `core/hooks` — Caremate Abstractions
+* **`AgentExecutionContext`:** Đối tượng bất biến (`readonly`) mang `userId` ngay từ gốc, kèm context (user profile, system rules, active plans) và prefetch data (RAG chunks, recent messages).
+* **`AIOSHookHandler`:** Hệ thống Hook đánh chặn bất biến:
+  - `onBeforePromptBuild`: Làm giàu prompt theo chuỗi Functional Pipeline (`ctx = await hook.onBeforePromptBuild(ctx)`).
+  - `onBeforeToolExecution`: Policy guard kiểm tra quyền sở hữu (`userId`) và mức độ an toàn trước khi chạy Tool.
+  - `onAfterToolExecution`: Ghi nhận kết quả tool cho LLM reflection.
+  - `onAfterCompletion`: Thu thập trace, token usage và đo độ trễ.
 
-### 3.2. `core/observability` — Tracing & Metrics
-* **Mục tiêu:** Giám sát toàn diện chu trình AI Agent để phục vụ debug và đánh giá chất lượng.
-* **Thành phần:**
-  - Ghi nhận Trace/Span cho từng vòng lặp LLM Call, Tool Call, Retrieval time.
-  - Đo lường Latency, Prompt Tokens, Completion Tokens và tỷ lệ lỗi.
+### 3.2. `core/llm` & `core/queue` — Anti-Corruption Layer
+* **`ILLMClient` & `IEmbeddingClient`:** Cô lập nghiệp vụ khỏi các thư viện bên ngoài (OpenAI, Gemini, Anthropic, Ollama).
+* **`IJobQueue`:** Trừu tượng hóa hàng đợi nền, độc lập hoàn toàn với công nghệ thực thi bên dưới (BullMQ hay PGlite Table Queue).
 
-### 3.3. `infrastructure/database` & `infrastructure/vector-store`
-* **PostgreSQL (Prisma ORM):** Quản trị quan hệ bền vững cho `Conversation`, `Message`, `Memory`, `Plan`, `Task`, `Workflow`, `AgentSession`.
-* **Vector Store (Qdrant / pgvector):** Lưu trữ embedding vectors 768/1536 chiều của các `DocumentChunk` cho RAG.
-* **Redis (Cache & Queue):** Quản lý session streaming tức thời, cache kết quả truy vấn và rate limit.
-* **Local File Storage:** Quản lý lưu trữ file gốc upload lên hệ thống tại thư mục lưu trữ cục bộ.
+### 3.3. `infrastructure/` — Adapters Thực Thi
+* **Desktop Runtime (Zero-Daemon):**
+  - **`PGlite` + bundled `pgvector`:** PostgreSQL chạy dạng WASM nhúng ngay trong tiến trình Node.js của NestJS thông qua `@prisma/adapter-pglite`. Lưu trữ toàn bộ dữ liệu quan hệ, canonical chunks, và chỉ mục vector HNSW vào một thư mục trong `userData`.
+  - **`PgVectorAdapter`:** Adapter truy vấn vector trực tiếp qua extension `pgvector` có sẵn trong PGlite.
+  - **`PgLiteQueueAdapter`:** Hàng đợi tác vụ nền chạy trực tiếp trên bảng SQL của PGlite (thay thế hoàn toàn Redis).
+* **Development / Cloud Runtime:**
+  - Standard PostgreSQL 16 + `QdrantAdapter` + `BullMQAdapter` (chạy qua Docker Compose).
 
 ---
 
-## 4. Chi tiết Ứng Dụng Giao Diện (`apps/web`)
+## 4. Chi tiết Ứng Dụng Client (`apps/web` & `apps/desktop`)
 
-Ứng dụng Frontend được xây dựng bằng **React 19 + Vite + TypeScript**, đóng vai trò là giao diện điều hành thống nhất (Unified AI Dashboard):
-
-1. **Chat Screen:** Giao diện trò chuyện trực quan hỗ trợ markdown rendering, code highlight và hiển thị câu trả lời streaming tức thì qua SSE.
-2. **Knowledge Base Manager:** Giao diện kéo-thả upload tài liệu (PDF, MD, DOCX), xem danh sách tài liệu đã index và kiểm tra kết quả tìm kiếm ngữ nghĩa.
-3. **Memory Board:** Quản lý hồ sơ ký ức của người dùng theo danh mục (profile, sở thích, dự án), cho phép thêm/sửa/xóa thủ công.
-4. **Planner Dashboard:** Bảng Kanban / Todo view hiển thị các kế hoạch và nhiệm vụ do người dùng hoặc AI tạo ra.
-5. **Agent & Workflow Tracker:** Giám sát các bước chạy của Agent (Thought $\rightarrow$ Action $\rightarrow$ Observation), xem log thực thi tool và tiến độ workflow.
+1. **React Web App (`apps/web`):**
+   - Chạy trên trình duyệt (HTTPS).
+   - Đăng nhập qua Keycloak OIDC, hiển thị giao diện chat, knowledge hub, memory và kanban planner.
+   - Kết nối với Local Companion thông qua Private Network Access (PNA) kèm pairing token. Nếu chưa pair, web hoạt động ở chế độ portal (quản lý tài khoản, tải desktop app, xem trạng thái sync).
+2. **Electron Desktop App (`apps/desktop`):**
+   - Electron Main quản lý vòng đời NestJS sidecar, cấp phát port động (`Dynamic Port Allocation`), kiểm tra health-check và shutdown an toàn.
+   - Đóng gói UI bằng Electron Renderer (gọi local API tương tự web app).
+   - Preload Script bảo mật: không bật `nodeIntegration`, kiểm tra nghiêm ngặt IPC message.
 
 ---
 
@@ -251,27 +235,24 @@ Mỗi module nghiệp vụ trong NestJS tuân theo cấu trúc tiêu chuẩn:
 
 | Module gọi (Caller) | Module phụ thuộc (Callee) | Mục đích giao tiếp |
 |---|---|---|
-| `apps/web` | `apps/api` | REST API calls & SSE/WebSocket Streaming |
-| `modules/chat` | `core/llm` | Gửi prompt hoàn chỉnh, nhận completion & stream |
-| `modules/chat` | `modules/knowledge` | Truy xuất top-k chunks liên quan cho RAG |
-| `modules/chat` | `modules/memory` | Lấy hồ sơ người dùng để bổ sung ngữ cảnh |
+| `apps/web` / `apps/desktop` | `apps/api` | REST API calls & SSE Streaming (qua Localhost / PNA) |
+| `modules/chat` | `core/llm`, `core/hooks` | Gửi prompt hoàn chỉnh, chạy pipeline enrich và nhận token stream |
+| `modules/chat` | `modules/knowledge`, `modules/memory` | Truy xuất top-k chunks và memory dài hạn theo `ctx.userId` |
 | `modules/knowledge` | `core/llm` | Sinh embedding vector cho document chunks |
-| `modules/knowledge` | `infrastructure/vector-store` | Lưu và tìm kiếm vector tương đồng |
-| `modules/knowledge` | `infrastructure/storage` | Lưu trữ file gốc người dùng tải lên |
-| `modules/agents` | `core/llm` | Thực hiện vòng lặp suy luận (ReAct reasoning) |
-| `modules/agents` | `modules/tools` | Gọi các công cụ bên ngoài theo chỉ thị của LLM |
-| `modules/agents` | `modules/workflow` | Kích hoạt các sub-workflow phức tạp |
-| `modules/workflow` | `modules/tools` | Chạy các bước là tool call trực tiếp |
-| `modules/workflow` | `modules/agents` | Ủy quyền các bước cần khả năng suy luận AI |
-| `Tất cả modules` | `core/observability` | Ghi nhận trace event, metrics, token usage |
-| `Tất cả modules` | `infrastructure/database` | Lưu trữ dữ liệu thực thể bền vững (PostgreSQL) |
+| `modules/knowledge` | `infrastructure/vector-store` | Lưu và tìm kiếm vector tương đồng (`PgVectorAdapter` / `Qdrant`) |
+| `modules/agents` | `core/llm`, `modules/tools` | Vòng lặp ReAct: suy luận và kích hoạt công cụ có Policy Guard |
+| `modules/workflow` | `core/queue`, `modules/tools` | Đẩy task vào hàng đợi `IJobQueue` và thực thi các bước trong DAG |
+| `modules/sync` | `infrastructure/database` | Đọc dữ liệu local kèm `deletedAt` (tombstone) để mã hóa E2EE |
+| `Tất cả modules` | `modules/auth` | Nhận diện người dùng qua `@CurrentUser()` và `AIOSAuthGuard` |
 
 ---
 
 ## 6. Nguyên Tắc Thiết Kế (Architectural Principles)
 
 1. **Phụ thuộc một chiều (Unidirectional Dependency):**
-   $$\text{apps/web} \longrightarrow \text{apps/api (Modules)} \longrightarrow \text{Core Services} \longrightarrow \text{Infrastructure}$$
-   Tuyệt đối không có phụ thuộc vòng (no circular dependency) giữa các module.
-2. **Độc lập và Cô lập (Loose Coupling):** Các module nghiệp vụ chỉ giao tiếp với nhau qua Services/Interfaces công khai, không truy cập trực tiếp vào DB Entity của module khác.
-3. **Sẵn sàng tiến hóa (Evolution to Microservices):** Các module tiêu tốn nhiều tài nguyên tính toán như `knowledge` (RAG worker) hoặc `agents` (Agent execution engine) có thể dễ dàng tách thành các container/service độc lập ở Phase 2 mà không làm thay đổi logic các module còn lại.
+   $$\text{Clients (Web/Desktop)} \longrightarrow \text{API Layer (Modules)} \longrightarrow \text{Core Contracts} \longleftarrow \text{Infrastructure (Adapters)}$$
+   Tầng Core không phụ thuộc vào bất kỳ thư viện bên ngoài hay module nào khác.
+2. **Cô lập Dữ liệu Người dùng (Data Isolation):**
+   Mọi thao tác đọc/ghi/tìm kiếm đều phải có `userId` làm điều kiện tiên quyết. Không cho phép bất kỳ truy vấn nào bỏ qua ownership.
+3. **Local-First & Zero-Daemon:**
+   Bản Desktop ưu tiên tối đa tính tự chứa (self-contained): không yêu cầu cài đặt Docker, không spawn các daemon cồng kềnh ngoài NestJS sidecar.
