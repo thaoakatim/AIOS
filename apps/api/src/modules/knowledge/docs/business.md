@@ -2,65 +2,84 @@
 
 ## 1. Mục tiêu nghiệp vụ
 
-Knowledge Module giúp AIOS biến từ một chatbot tổng quát thành một hệ thống có khả năng “học từ tài liệu” và “trả lời dựa trên nguồn dữ liệu thực”. Nói cách khác, AIOS có thể:
+Knowledge Module giúp AIOS chuyển từ một chatbot tổng quát thành hệ thống có khả năng học từ tài liệu và trả lời dựa trên nguồn dữ liệu thực. Người dùng có thể:
 
-- upload tài liệu từ người dùng,
-- trích xuất nội dung từ file,
-- tìm kiếm ngữ nghĩa trong kho tri thức,
-- đưa những đoạn văn bản liên quan vào prompt,
-- trả lời dựa trên bằng chứng rõ ràng từ tài liệu đã index.
+- Tải tài liệu lên hệ thống.
+- Trích xuất nội dung từ file.
+- Tìm kiếm ngữ nghĩa trong kho tri thức.
+- Đưa các đoạn văn bản liên quan vào prompt.
+- Nhận câu trả lời có dẫn nguồn từ tài liệu đã được index.
 
 ## 2. Vấn đề cần giải quyết
 
-Người dùng thường có rất nhiều tài liệu rời rạc:
+Người dùng thường có nhiều tài liệu rời rạc, chẳng hạn:
 
-- tài liệu PDF, DOCX, TXT, Markdown,
-- hồ sơ dự án,
-- SOP, tài liệu nội bộ,
-- ghi chú cá nhân,
-- tài liệu liên quan đến cuộc hội thoại.
+- Tài liệu PDF, DOCX, TXT và Markdown.
+- Hồ sơ dự án.
+- Quy trình vận hành (SOP) và tài liệu nội bộ.
+- Ghi chú cá nhân.
+- Tài liệu liên quan đến từng cuộc hội thoại.
 
-Nếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dỳng vai trò “bộ nhớ kiến thức” Nếu AIOS chỉ dựa vm khảo Nếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dựa vào hNếu AIOS chỉ dỳng vai trò “bộ nhớ kiến thức” Nếu AIOS chỉ dựa s�Nếu AIOS chỉ dựa vào hNếu AIOS  vNếu AIOS chỉ dựa vào hNếu Aậy
-Câu trả lời được tạo ra dựa trên chunks đã index và có khả năng truy nguyên nguồn gốc dữ liệu.
+Nếu AIOS chỉ dựa vào kiến thức có sẵn của mô hình, hệ thống sẽ không biết nội dung riêng trong các tài liệu này. Câu trả lời có thể thiếu căn cứ, không cập nhật hoặc khó kiểm chứng.
 
-### 3.3 Cá nhân hóa AIOS
-AIOS không chỉ biết cách tAIOS không chỉ biết cách tAIOS màAIOS không chỉ biết cách tAIOS không chỉ biết cách tA dùAIOS không chỉ biết cách tAIOS k�AIOS không chỉ bc
-AIOS không chỉ biết các�AIOS không chỉ bnneAIOS không chỉ biết các�AIOS không chỉ bnnhức cho các quy trình có tính quyết định cao.
+Knowledge Module giải quyết vấn đề đó bằng cách truy xuất các đoạn nội dung liên quan từ tài liệu đã index, đưa chúng vào ngữ cảnh khi trả lời và hỗ trợ truy nguyên nguồn dữ liệu.
+
+## 3. Giá trị mang lại
+
+### 3.1 Trả lời dựa trên tài liệu
+
+AIOS tìm các đoạn văn bản liên quan trong kho tri thức và sử dụng chúng làm ngữ cảnh để tạo câu trả lời.
+
+### 3.2 Truy nguyên nguồn
+
+Câu trả lời có thể gắn với các đoạn hoặc tài liệu đã được sử dụng, giúp người dùng kiểm tra căn cứ.
+
+### 3.3 Hỗ trợ cá nhân hóa
+
+AIOS có thể khai thác tài liệu và ngữ cảnh phù hợp với từng người dùng hoặc cuộc hội thoại, thay vì chỉ đưa ra câu trả lời chung chung.
 
 ## 4. Người dùng và lợi ích
 
 ### Người dùng cuối
-- upload tài liệu,
-- hỏi câu hỏi trên tài liệu,
-- liên kết tài liệu với message cụ thể,
-- truy xuất ngữ cảnh cho các cuộc trò chuyện.
 
-### Quản trị viên / vận hành
-- theo dõi trạng thái xử lý tài liệu,
-- kiểm tra file nào đã index thành công,
-- retry khi gặp lỗi hoặc document bị fail.
+- Tải tài liệu lên và đặt câu hỏi về nội dung.
+- Liên kết tài liệu với một message cụ thể.
+- Truy xuất ngữ cảnh phù hợp cho cuộc trò chuyện.
+
+### Quản trị viên và vận hành
+
+- Theo dõi trạng thái xử lý tài liệu.
+- Kiểm tra tài liệu đã được index thành công hay chưa.
+- Thử xử lý lại khi tài liệu gặp lỗi.
 
 ### Nhà phát triển
-- debug retrieval quality,
-- kiểm tra chunk và vector store,
-- đo lường performance của pipeline.
+
+- Kiểm tra chất lượng retrieval.
+- Kiểm tra chunks và vector store.
+- Theo dõi hiệu năng của pipeline.
 
 ## 5. Luồng nghiệp vụ chính
 
-### 5.1 Upload tài liệu
-Người dùng gửi file qua API. Hệ thống xác thực định dạng, lưu file gốc và tạo bản ghi document trong PostgreSQL.
+### 5.1 Tải tài liệu lên
 
-### 5.2 Tạo kho tri thức
-File được trích xuất text, chia thành chunk, tạo embedding và lưu vào vector store. Từ đó, dữ liệu có thể được truy vấn giống như ngân hàng tri thức.
+Người dùng gửi file qua API. Hệ thống xác thực định dạng, lưu file gốc và tạo bản ghi tài liệu trong PostgreSQL.
 
-### 5.3 Search và truy xuất
-Khi người dùng hỏKhi người dùng hỏhóa câu hỏi, tìm top K chunks phù hợp và trả về kKhi người dùng h� dùng làm context cho prompt.
+### 5.2 Xây dựng kho tri thức
 
-### 5.4 Gắn tài liệu với message
-Document có thể gắn với từng message để phục vụ truy nguyên, kiểm chứng và contextual grounding khi trả lời.
+Hệ thống trích xuất văn bản từ file, chia nội dung thành các chunk, tạo embedding và lưu dữ liệu cần thiết vào vector store. Sau khi hoàn tất, nội dung có thể được tìm kiếm theo ngữ nghĩa.
+
+### 5.3 Tìm kiếm và truy xuất
+
+Khi người dùng đặt câu hỏi, hệ thống tìm các chunk phù hợp nhất trong kho tri thức. Các chunk này được đưa vào context của prompt để hỗ trợ tạo câu trả lời.
+
+### 5.4 Liên kết tài liệu với message
+
+Tài liệu có thể được liên kết với một message cụ thể để hỗ trợ truy nguyên nguồn và cung cấp ngữ cảnh phù hợp cho câu trả lời.
 
 ## 6. KPI thành công
 
-- tỷ lệ upload thành công cao,
-- thời gian xử lý document chấp nhận được,
-- retrieval trả về chunk liên qu- retrieval trả về chunk liêa tr- retrieval trả về chunk liên qu- re ti- retrieval trả về chunk l tiế- retrieval trả về chg - retrieval trả về chunk liên qu- retrieval trả về chunk liêa tr- retrieval trả về chunk liên qu- re ti- retrieval trảđọ- retrieval trả về chum m- retrieval trả về chunk liên qu- retrieval trả về chunk liêa tr- retrieval trả về chunk liên qu- re ti- retrieval trả về chunk l tiế- retrieval trả về chg - reModule là “hệ thống trí nh- retrieval trả về chunk liên qu- retrieval trả về chunk liêa tr- retrieval trả về chunk liên qu- re ti- retrieval trả về chunk l tiế- rethiệp vụ thật. Đây là yếu tố quan trọng giúp AIOS hoạt động như một trợ lý chủ chốt trong môi trường công việc và doanh nghiệp.
+- Tỷ lệ tải tài liệu lên thành công cao.
+- Thời gian xử lý tài liệu nằm trong ngưỡng chấp nhận được.
+- Các chunk được truy xuất có mức độ liên quan cao với câu hỏi.
+- Có thể xác định nguồn tài liệu đã được dùng để tạo câu trả lời.
+- Có thể theo dõi và xử lý lại tài liệu gặp lỗi.
