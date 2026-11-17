@@ -11,7 +11,7 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
 
 ## 🔹 Phase 1: Khởi tạo Nền tảng Dữ liệu & Hợp đồng Cốt lõi (Sprint 0 - Foundations)
 
-> **Mục tiêu:** Hoàn thiện Database Schema (Prisma 14 bảng cơ sở), kết nối PostgreSQL và dựng các Interface/Context cốt lõi độc lập thư viện ngoài. Docker Compose dùng cho môi trường development; đích đến của Desktop Production là **PGlite + `pgvector`** chạy nhúng trong tiến trình NestJS.
+> **Mục tiêu:** Hoàn thiện Database Schema (Prisma 15 bảng qua 8 modules cốt lõi), kết nối PostgreSQL và dựng các Interface/Context cốt lõi độc lập thư viện ngoài. Docker Compose dùng cho môi trường development; đích đến của Desktop Production là **PGlite + `pgvector`** chạy nhúng trong tiến trình NestJS.
 
 - [x] **Task 0.1: Hạ tầng Docker & Cấu hình Môi trường**
   - Đã có: `docker/docker-compose.yml`, `docker/init-db/01-init.sql`, `docker/.env`.
@@ -19,25 +19,30 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
   - Đã cấu hình `.npmrc` cấp quyền build cho pnpm v10+ (`onlyBuiltDependencies`).
 
 - [x] **Task 0.2: Cài đặt Prisma ORM & Triển khai Schema Database Cơ sở**
-  - [x] Thiết kế xong Master ERD chuẩn hóa 7 modules (14 bảng cơ sở).
+  - [x] Thiết kế xong Master ERD chuẩn hóa 8 modules (15 bảng cơ sở).
   - [x] Cài đặt Prisma 6.19.3 (bản Stable tương thích NestJS 11).
   - [x] Viết và validate thành công `apps/api/prisma/schema.prisma`:
+    - **Auth & Identity:** `User` (Owner, liên kết Keycloak Subject)
     - **Chat:** `Conversation`, `Message`
     - **Agents:** `AgentConfig`, `AgentSession`, `AgentRun`
     - **Knowledge (RAG):** `Document`, `MessageDocument` (M:N), `DocumentChunk` (`pgvector` 768)
     - **Tools:** `ToolExecution`
     - **Workflow:** `Workflow`, `WorkflowStep`
     - **Planner:** `Plan`, `Task` (Sub-task self-relation)
-    - **Memory:** `MemoryRecord` (Ký ức Global kèm `sourceAgentSessionId` phục vụ truy vết)
+    - **Memory:** `MemoryRecord` (Ký ức Global/Scoped kèm `sourceAgentSessionId` phục vụ truy vết và `@@unique([userId, key])`)
   - [x] Chạy `pnpm exec prisma migrate dev --name init` tạo bảng trên PostgreSQL thực tế.
   - [x] Viết `apps/api/src/infrastructure/database/prisma.service.ts` kết nối NestJS Lifecycle (`onModuleInit`, `onModuleDestroy`) và `PrismaModule`.
 
 - [x] **Task 0.3: Xây dựng Thư viện Dùng chung (`packages/shared-types`)**
   - Khởi tạo package `shared-types` trong `packages/` (DTOs, Enums, API Request/Response) để dùng chung cho cả `api` và `web`.
+  - [x] Bổ sung module `user` (`IUser`, `DEFAULT_LOCAL_USER`, `DEFAULT_LOCAL_USER_ID`).
+  - [x] Chuẩn hóa các trường E2EE sync (`version`, `contentHash`, `deletedAt`, `embeddingModel`, `userId`) vào `IDocument`, `IDocumentChunk`, `IMemoryRecord`.
 
 - [x] **Task 0.4: Tầng Core Contracts (Trừu tượng hóa kiểu Caremate)**
-  - `apps/api/src/core/context/agent-context.interface.ts`: Định nghĩa `AgentExecutionContext` (đối tượng bất biến `readonly` mang toàn bộ ngữ cảnh thực thi).
-  - `apps/api/src/core/hooks/`: Định nghĩa `AIOSHookHandler` (`onBeforePromptBuild`, `onBeforeToolExecution`, `onAfterToolExecution`, `onAfterCompletion`) & `HookRegistry`.
+  - `apps/api/src/core/context/agent-context.interface.ts`: Định nghĩa `AgentExecutionContext` (đối tượng bất biến `readonly` mang toàn bộ ngữ cảnh thực thi, chứa `readonly userId: string`).
+  - `apps/api/src/core/context/context-builder.ts`: Hiện thực Builder Pattern tạo lập và nhân bản context bất biến (`ContextBuilder.from(ctx)`).
+  - `apps/api/src/core/hooks/`: Định nghĩa `AIOSHookHandler` (`onBeforePromptBuild` dạng Immutable Pipeline, `onBeforeToolExecution`, `onAfterToolExecution`, `onAfterCompletion`) & `HookRegistry`.
+  - `apps/api/src/core/queue/job-queue.interface.ts`: Hợp đồng trừu tượng hóa hàng đợi nền `IJobQueue` độc lập hạ tầng.
   - `apps/api/src/core/llm/interfaces/`: Định nghĩa `ILLMClient`, `LLMMessage`, `StreamingChunk`, `TokenUsage`.
   - `apps/api/src/core/observability/`: Định nghĩa Interface Tracing & Logger.
   - *DoD:* Core code độc lập 100% với SDK bên ngoài.
@@ -58,7 +63,7 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
   - Hiện thực `PgVectorAdapter` (dùng extension `pgvector` của Postgres/PGlite) và `QdrantAdapter` (kết nối Qdrant REST/gRPC). Theo quyết định kiến trúc mới nhất, **`PgVectorAdapter` chạy trên PGlite là đích mặc định cho Desktop** (Zero-Daemon); `QdrantAdapter` được giữ làm adapter tùy chọn cho môi trường Dev/Cloud.
 
 - [x] **Task 1.3: Queue & Storage Adapters (`infrastructure/`)**
-  - `RedisService` & **BullMQ** cho môi trường dev. *(Lưu ý: Sẽ bổ sung `IJobQueue` và SQL-backed Queue trên PGlite ở Task 2.2.5 & Phase 8 để loại bỏ hoàn toàn phụ thuộc Redis trên Desktop).*
+  - `RedisService` & **BullMQ** cho môi trường dev. Đã trừu tượng hóa qua `IJobQueue` tại `core/queue/job-queue.interface.ts` (Task 2.2.5); `QueueService` hiện thực `IJobQueue`. Giai đoạn Desktop Production (Phase 8) sẽ cắm thêm `PgLiteQueueAdapter` để loại bỏ hoàn toàn phụ thuộc Redis.
   - `LocalStorageService`: Hiện lưu file upload theo `LOCAL_STORAGE_PATH`, mặc định `./data/storage` cho development. Desktop production sẽ cấu hình data root bền vững trong OS application data directory (`app.getPath('userData')`), tách khỏi thư mục cài đặt.
 
 ---
@@ -71,6 +76,8 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
   - CRUD Ký ức dài hạn (`MemoryRecord`: User Profile, Preferences, Project Facts) lưu vào PostgreSQL.
   - Cung cấp method `getRelevantMemory(ctx)` để inject vào `AgentExecutionContext`.
   - Tích hợp ghi nhận nguồn gốc thông qua `sourceAgentSessionId`.
+  - Đã cập nhật `MemoryRepository` và `MemoryService` theo `userId`, ràng buộc phức hợp `@@unique([userId, key])`, và phương thức `enrichContext` dùng `ContextBuilder` đảm bảo tính bất biến.
+  - Đầy đủ tài liệu nghiệp vụ và kỹ thuật: [apps/api/src/modules/memory/docs/memory-module-business.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/memory/docs/memory-module-business.md) và [apps/api/src/modules/memory/docs/memory-module-technical.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/memory/docs/memory-module-technical.md).
 
 - [x] **Task 2.2: Knowledge & RAG Module (`modules/knowledge`)**
   - **Pipeline:** `POST /knowledge/upload` → Lưu file (`LocalStorageService`) → Text Extraction (`DocumentProcessorService`) → Chunking (`RecursiveTextSplitter`) → Embedding (`EmbeddingGatewayService`) → Lưu Vector Store (`IVectorStore`).
@@ -85,6 +92,8 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
     - `messageIds` kèm theo khi upload để đính kèm ngay tài liệu vào tin nhắn.
   - **Bổ sung:** `GET /knowledge/context` (RAG context sẵn sàng chèn prompt) · `GET /knowledge/:id/chunks` · `POST /knowledge/:id/reindex` · `GET /knowledge/stats`.
   - **Điểm tích hợp cho Task 2.3:** `getRelevantChunks(ctx)` và `injectIntoContext(ctx)` nạp `ctx.prefetch.ragChunks` (tương xứng với `MemoryService.getRelevantMemory`). Khi Vector Store/Embedding lỗi, service trả `[]` và ghi cảnh báo để chat vẫn hoạt động bằng Memory + Chat History.
+  - Đã cập nhật `KnowledgeRepository` lưu `userId` và hỗ trợ các trường sync E2EE (`version`, `contentHash`, `deletedAt`, `embeddingModel`).
+  - Đầy đủ tài liệu nghiệp vụ và kỹ thuật: [apps/api/src/modules/knowledge/docs/business.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/knowledge/docs/business.md) và [apps/api/src/modules/knowledge/docs/technique.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/knowledge/docs/technique.md).
   - *DoD:* 104 unit test xanh; `tsc`/`eslint`/`nest build` sạch; `KnowledgeRepository` là nơi duy nhất chạm Prisma.
 
 - [x] **Task 2.2.5: [URGENT REFACTOR] Chuẩn hóa Ownership, Sync Fields, Immutable Hook & Queue Abstraction (Làm ngay trước Auth & Chat)**
