@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Queue, Worker, Job } from 'bullmq';
 import { RedisService } from './redis.service';
+import { IJobQueue, JobHandler, JobOptions } from '../../core/queue';
 
 export interface QueueJobData {
   type: string;
@@ -11,7 +12,7 @@ export interface QueueJobData {
 export type JobProcessor = (job: Job<QueueJobData>) => Promise<void>;
 
 @Injectable()
-export class QueueService {
+export class QueueService implements IJobQueue {
   private readonly queues: Map<string, Queue> = new Map();
   private readonly workers: Map<string, Worker> = new Map();
 
@@ -45,14 +46,35 @@ export class QueueService {
     return worker;
   }
 
-  async addJob(
+  async addJob<T = Record<string, unknown>>(
     queueName: string,
     jobName: string,
-    data: QueueJobData,
-    options?: { delay?: number; priority?: number },
-  ): Promise<void> {
+    data: T,
+    options?: JobOptions,
+  ): Promise<void | string> {
     const queue = this.getQueue(queueName);
-    await queue.add(jobName, data, options);
+    const job = await queue.add(jobName, data, options);
+    return job?.id;
+  }
+
+  process<T = Record<string, unknown>>(
+    queueName: string,
+    handler: JobHandler<T>,
+    concurrency = 5,
+  ): void {
+    this.createWorker(
+      queueName,
+      async (bullJob) => {
+        await handler({
+          id: bullJob.id,
+          name: bullJob.name,
+          data: bullJob.data as T,
+          options: bullJob.opts as unknown as JobOptions,
+          timestamp: bullJob.timestamp,
+        });
+      },
+      concurrency,
+    );
   }
 
   async close(): Promise<void> {

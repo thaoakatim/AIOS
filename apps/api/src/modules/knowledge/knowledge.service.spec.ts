@@ -590,6 +590,7 @@ describe('KnowledgeService', () => {
     ]);
 
     const ctx = {
+      userId: 'test-user-id',
       executionId: 'exec-1',
       sessionId: 'session-1',
       query: 'hỏi về RAG',

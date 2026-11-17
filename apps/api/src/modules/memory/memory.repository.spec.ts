@@ -10,6 +10,7 @@ describe('MemoryRepository', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
@@ -35,7 +36,7 @@ describe('MemoryRepository', () => {
     expect(repository).toBeDefined();
   });
 
-  it('create delegates to prisma.memoryRecord.create', async () => {
+  it('create delegates to prisma.memoryRecord.create with default userId when omitted', async () => {
     prismaMock.memoryRecord.create.mockResolvedValue({ id: 'id-1' });
     const data = {
       key: 'user.name',
@@ -46,7 +47,42 @@ describe('MemoryRepository', () => {
     };
     await expect(repository.create(data)).resolves.toEqual({ id: 'id-1' });
     expect(prismaMock.memoryRecord.create).toHaveBeenCalledWith({
+      data: {
+        ...data,
+        userId: '00000000-0000-0000-0000-000000000001',
+      },
+    });
+  });
+
+  it('create delegates to prisma.memoryRecord.create with provided userId', async () => {
+    prismaMock.memoryRecord.create.mockResolvedValue({ id: 'id-2' });
+    const data = {
+      userId: 'custom-user-uuid',
+      key: 'user.theme',
+      value: 'dark',
+      category: 'preference',
+      scope: 'global',
+      sourceAgentSessionId: null,
+    };
+    await expect(repository.create(data)).resolves.toEqual({ id: 'id-2' });
+    expect(prismaMock.memoryRecord.create).toHaveBeenCalledWith({
       data,
+    });
+  });
+
+  it('findByKey calls findUnique with compound key when userId is provided', async () => {
+    prismaMock.memoryRecord.findUnique.mockResolvedValue({ id: 'id-1' });
+    await repository.findByKey('user.name', 'user-1');
+    expect(prismaMock.memoryRecord.findUnique).toHaveBeenCalledWith({
+      where: { userId_key: { userId: 'user-1', key: 'user.name' } },
+    });
+  });
+
+  it('findByKey calls findFirst when userId is omitted', async () => {
+    prismaMock.memoryRecord.findFirst.mockResolvedValue({ id: 'id-1' });
+    await repository.findByKey('user.name');
+    expect(prismaMock.memoryRecord.findFirst).toHaveBeenCalledWith({
+      where: { key: 'user.name' },
     });
   });
 

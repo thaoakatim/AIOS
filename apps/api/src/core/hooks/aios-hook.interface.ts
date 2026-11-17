@@ -2,8 +2,13 @@ import { AgentExecutionContext } from '../context/agent-context.interface';
 import { AgentResponse } from '../context/agent-response.interface';
 
 export interface AIOSHookHandler {
-  /** Được gọi trước khi LLM Gateway build prompt (bổ sung memory, filter RAG) */
-  onBeforePromptBuild?(ctx: AgentExecutionContext): Promise<void>;
+  /**
+   * Được gọi trước khi LLM Gateway build prompt (bổ sung memory, filter RAG).
+   * Trả về một bản sao AgentExecutionContext mới (Immutable Pipeline).
+   */
+  onBeforePromptBuild?(
+    ctx: AgentExecutionContext,
+  ): Promise<AgentExecutionContext>;
 
   /** Được gọi trước khi một Tool được kích hoạt (kiểm tra quyền, an toàn hệ thống) */
   onBeforeToolExecution?(

@@ -2,7 +2,7 @@
 // AIOS (Personal AI Operating System) — Prisma Database Schema
 // Architecture: Modular Monolith | Message-Centric Design | Single-Agent
 // Database: PostgreSQL 16 with pgvector & uuid-ossp extensions
-// Total: 14 tables across 7 business modules
+// Total: 15 tables across 8 business modules
 // ==============================================================================
 
 generator client {
@@ -17,6 +17,32 @@ datasource db {
 }
 
 // =============================================================================
+// 0. AUTH & IDENTITY MODULE
+//    Quản lý thông tin User và liên kết Keycloak OIDC Subject.
+// =============================================================================
+
+/// Người dùng hệ thống AIOS (được map từ Keycloak Subject hoặc Local Dev User).
+/// Chủ sở hữu (Owner) của mọi aggregate gốc trong hệ thống.
+model User {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  keycloakSubject String?  @unique
+  email           String
+  displayName     String?
+  emailVerified   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 1:N Relationships (Ownership)
+  conversations Conversation[]
+  documents     Document[]
+  memoryRecords MemoryRecord[]
+  workflows     Workflow[]
+  plans         Plan[]
+
+  @@map("users")
+}
+
+// =============================================================================
 // 1. CHAT MODULE
 //    Entry point của hệ thống. Message là trung tâm (Message-Centric Design).
 // =============================================================================
@@ -24,10 +50,17 @@ datasource db {
 /// Cuộc hội thoại giữa người dùng và hệ thống AIOS.
 /// Đây là Begin Point (điểm bắt đầu) của toàn bộ luồng dữ liệu.
 model Conversation {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  title     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String    @db.Uuid
+  title       String?
+  version     Int       @default(1)
+  contentHash String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Belongs to (Ownership)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // 1:N Relationships
   messages      Message[]
@@ -41,12 +74,15 @@ model Conversation {
 /// Lưu ý: Dual FK (conversationId + agentSessionId) — tính toàn vẹn được
 /// validate ở tầng Application Service, không ràng buộc ở DB level.
 model Message {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  conversationId String   @db.Uuid
-  agentSessionId String?  @db.Uuid // Nullable: tin nhắn system/user đầu tiên chưa có session
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String    @db.Uuid
+  agentSessionId String?   @db.Uuid // Nullable: tin nhắn system/user đầu tiên chưa có session
   role           String // "user" | "assistant" | "tool" | "system"
   content        String
-  createdAt      DateTime @default(now())
+  version        Int       @default(1)
+  contentHash    String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
 
   // Belongs to
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -131,12 +167,20 @@ model AgentRun {
 /// Tài liệu gốc do người dùng upload (PDF, MD, DOCX,...).
 /// Trải qua pipeline: pending → processing → indexed | failed.
 model Document {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  title     String
-  fileType  String? // e.g. "pdf", "md", "docx"
-  sourceUrl String? // Đường dẫn lưu trữ file gốc trên Local Storage
-  status    String   @default("pending") // "pending" | "processing" | "indexed" | "failed"
-  createdAt DateTime @default(now())
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String    @db.Uuid
+  title          String
+  fileType       String? // e.g. "pdf", "md", "docx"
+  sourceUrl      String? // Đường dẫn lưu trữ file gốc trên Local Storage
+  status         String    @default("pending") // "pending" | "processing" | "indexed" | "failed"
+  embeddingModel String?
+  version        Int       @default(1)
+  contentHash    String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  // Belongs to (Ownership)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // 1:N Relationships
   chunks           DocumentChunk[]
@@ -161,10 +205,14 @@ model MessageDocument {
 /// Đoạn văn bản đã được chia nhỏ (Chunk) từ Document gốc.
 /// Chứa vector embedding (pgvector) phục vụ Semantic Search / RAG.
 model DocumentChunk {
-  id         String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  documentId String @db.Uuid
-  content    String
-  metadata   Json? // Thông tin bổ sung: page number, line range, heading,...
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  documentId     String    @db.Uuid
+  content        String
+  metadata       Json? // Thông tin bổ sung: page number, line range, heading,...
+  embeddingModel String?
+  version        Int       @default(1)
+  contentHash    String?
+  deletedAt      DateTime?
 
   /// Vector embedding 768 chiều (thay đổi thành 1536 nếu dùng OpenAI text-embedding-3-large).
   /// Prisma chưa hỗ trợ native type vector, sử dụng Unsupported type.
@@ -207,13 +255,18 @@ model ToolExecution {
 /// Quy trình tự động hóa nhiều bước, được kích hoạt bởi 1 Message.
 /// Quan hệ 1:1 với Message (mỗi tin nhắn chỉ sinh tối đa 1 Workflow).
 model Workflow {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  messageId String   @unique @db.Uuid // 1:1 với Message kích hoạt
-  name      String
-  status    String   @default("running") // "running" | "paused" | "completed" | "failed"
-  createdAt DateTime @default(now())
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String    @db.Uuid
+  messageId   String    @unique @db.Uuid // 1:1 với Message kích hoạt
+  name        String
+  status      String    @default("running") // "running" | "paused" | "completed" | "failed"
+  version     Int       @default(1)
+  contentHash String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
 
-  // Belongs to (1:1)
+  // Belongs to (1:1 & Ownership)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   // 1:1 & 1:N Relationships
@@ -248,13 +301,18 @@ model WorkflowStep {
 /// Kế hoạch tổng thể, được sinh ra bởi Workflow.
 /// Quan hệ 1:1 với Workflow.
 model Plan {
-  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  workflowId String   @unique @db.Uuid // 1:1 với Workflow
-  title      String
-  status     String   @default("active") // "active" | "completed"
-  createdAt  DateTime @default(now())
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String    @db.Uuid
+  workflowId  String    @unique @db.Uuid // 1:1 với Workflow
+  title       String
+  status      String    @default("active") // "active" | "completed"
+  version     Int       @default(1)
+  contentHash String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
 
-  // Belongs to (1:1)
+  // Belongs to (1:1 & Ownership)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
   // 1:N Relationships
@@ -272,6 +330,9 @@ model Task {
   title        String
   status       String    @default("todo") // "todo" | "in_progress" | "done"
   dueDate      DateTime?
+  version      Int       @default(1)
+  contentHash  String?
+  deletedAt    DateTime?
   createdAt    DateTime  @default(now())
 
   // Belongs to
@@ -293,16 +354,22 @@ model Task {
 /// Dữ liệu này có tính Global — mọi AgentSession đều có thể đọc.
 /// sourceAgentSessionId (Nullable) cho phép truy vết: "AI học được điều này ở phiên nào?".
 model MemoryRecord {
-  id                   String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  sourceAgentSessionId String?  @db.Uuid // Nullable: NULL nếu User tự tạo tay qua Dashboard
-  scope                String   @default("global") // "global" | "conversation"
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId               String    @db.Uuid
+  sourceAgentSessionId String?   @db.Uuid // Nullable: NULL nếu User tự tạo tay qua Dashboard
+  scope                String    @default("global") // "global" | "conversation"
   category             String // "profile" | "preference" | "fact"
-  key                  String   @unique
+  key                  String
   value                String
-  updatedAt            DateTime @updatedAt
+  version              Int       @default(1)
+  contentHash          String?
+  deletedAt            DateTime?
+  updatedAt            DateTime  @updatedAt
 
-  // Belongs to (Nullable — Traceability link)
+  // Belongs to (Nullable — Traceability link & Ownership)
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   sourceAgentSession AgentSession? @relation(fields: [sourceAgentSessionId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, key])
   @@map("memory_records")
 }

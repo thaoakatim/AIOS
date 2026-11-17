@@ -47,7 +47,7 @@ describe('KnowledgeRepository', () => {
     expect(repository).toBeDefined();
   });
 
-  it('createDocument maps domain fields to prisma', async () => {
+  it('createDocument maps domain fields to prisma with default userId when omitted', async () => {
     prismaMock.document.create.mockResolvedValue({ id: 'doc-1' });
 
     await expect(
@@ -61,10 +61,38 @@ describe('KnowledgeRepository', () => {
 
     expect(prismaMock.document.create).toHaveBeenCalledWith({
       data: {
+        userId: '00000000-0000-0000-0000-000000000001',
         title: 'Sơ đồ kiến trúc',
         fileType: 'pdf',
         sourceUrl: '/api/files/abc.pdf',
         status: 'processing',
+        embeddingModel: undefined,
+      },
+    });
+  });
+
+  it('createDocument maps domain fields to prisma with custom userId and embeddingModel', async () => {
+    prismaMock.document.create.mockResolvedValue({ id: 'doc-2' });
+
+    await expect(
+      repository.createDocument({
+        userId: 'custom-user-uuid',
+        title: 'Sơ đồ kiến trúc 2',
+        fileType: 'pdf',
+        sourceUrl: '/api/files/abc2.pdf',
+        status: 'indexed',
+        embeddingModel: 'text-embedding-3-small',
+      }),
+    ).resolves.toEqual({ id: 'doc-2' });
+
+    expect(prismaMock.document.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'custom-user-uuid',
+        title: 'Sơ đồ kiến trúc 2',
+        fileType: 'pdf',
+        sourceUrl: '/api/files/abc2.pdf',
+        status: 'indexed',
+        embeddingModel: 'text-embedding-3-small',
       },
     });
   });

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Document, DocumentChunk, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { DEFAULT_LOCAL_USER_ID } from '../../core/auth/default-user';
 
 /** Tham số lọc danh sách tài liệu — service truyền giá trị đã validate. */
 export interface FindDocumentsParams {
@@ -49,13 +50,17 @@ export class KnowledgeRepository {
     fileType: string | null;
     sourceUrl: string | null;
     status: string;
+    userId?: string;
+    embeddingModel?: string | null;
   }): Promise<Document> {
     return this.prisma.document.create({
       data: {
+        userId: data.userId ?? DEFAULT_LOCAL_USER_ID,
         title: data.title,
         fileType: data.fileType,
         sourceUrl: data.sourceUrl,
         status: data.status,
+        embeddingModel: data.embeddingModel,
       },
     });
   }

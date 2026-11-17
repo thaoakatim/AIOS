@@ -8,6 +8,8 @@
  *   ("pending" → "processing" → "indexed" | "failed")
  * - `document_chunks.metadata` là JSONB chứa `chunkIndex`, `startOffset`,
  *   `endOffset`, `totalChunks` — dùng để trích dẫn nguồn trong câu trả lời.
+ * - version, contentHash, deletedAt: phục vụ E2EE Sync & Tombstone.
+ * - embeddingModel: phục vụ Smart Vector Sync.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DocumentStatus = void 0;

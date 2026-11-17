@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { MemoryRecord, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { DEFAULT_LOCAL_USER_ID } from '../../core/auth/default-user';
 
 /**
  * Tham số lọc ở tầng domain — service truyền giá trị đã validate,
@@ -26,6 +27,7 @@ export interface FindRecallCandidatesParams {
 }
 
 export interface CreateMemoryRecordData {
+  userId?: string;
   key: string;
   value: string;
   category: string;
@@ -59,6 +61,7 @@ export class MemoryRepository {
   create(data: CreateMemoryRecordData): Promise<MemoryRecord> {
     return this.prisma.memoryRecord.create({
       data: {
+        userId: data.userId ?? DEFAULT_LOCAL_USER_ID,
         key: data.key,
         value: data.value,
         category: data.category,
@@ -72,8 +75,15 @@ export class MemoryRepository {
     return this.prisma.memoryRecord.findUnique({ where: { id } });
   }
 
-  findByKey(key: string): Promise<MemoryRecord | null> {
-    return this.prisma.memoryRecord.findUnique({ where: { key } });
+  findByKey(key: string, userId?: string): Promise<MemoryRecord | null> {
+    if (userId) {
+      return this.prisma.memoryRecord.findUnique({
+        where: { userId_key: { userId, key } },
+      });
+    }
+    return this.prisma.memoryRecord.findFirst({
+      where: { key },
+    });
   }
 
   async findManyAndCount(

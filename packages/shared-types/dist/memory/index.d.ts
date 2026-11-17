@@ -4,18 +4,23 @@
  *
  * - scope: phạm vi ký ức ("global" xuyên hội thoại | "conversation" gắn với phiên cụ thể)
  * - category: nhóm ký ức ("profile" | "preference" | "fact")
- * - key: khóa duy nhất toàn cục (unique), value: nội dung ký ức
+ * - key: khóa duy nhất toàn cục theo user (`@@unique([userId, key])`), value: nội dung ký ức
  * - sourceAgentSessionId: truy vết nguồn gốc (nullable — null khi user tạo tay qua Dashboard)
+ * - version, contentHash, deletedAt: phục vụ E2EE Sync & Tombstone
  */
 import { MemoryCategory, MemoryScope } from '../enums';
 export { MemoryCategory, MemoryScope };
 export interface IMemoryRecord {
     id: string;
+    userId?: string;
     sourceAgentSessionId: string | null;
     scope: string;
     category: string;
     key: string;
     value: string;
+    version?: number;
+    contentHash?: string | null;
+    deletedAt?: Date | null;
     updatedAt: Date;
 }
 export interface CreateMemoryPayload {

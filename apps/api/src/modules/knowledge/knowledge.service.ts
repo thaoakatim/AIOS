@@ -627,6 +627,10 @@ export class KnowledgeService {
       id: hit.chunkId,
       documentId: hit.documentId,
       content: hit.content,
+      embeddingModel: null,
+      version: 1,
+      contentHash: null,
+      deletedAt: null,
       metadata: {
         ...hit.metadata,
         chunkIndex: hit.chunkIndex,

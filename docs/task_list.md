@@ -87,19 +87,20 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
   - **Điểm tích hợp cho Task 2.3:** `getRelevantChunks(ctx)` và `injectIntoContext(ctx)` nạp `ctx.prefetch.ragChunks` (tương xứng với `MemoryService.getRelevantMemory`). Khi Vector Store/Embedding lỗi, service trả `[]` và ghi cảnh báo để chat vẫn hoạt động bằng Memory + Chat History.
   - *DoD:* 104 unit test xanh; `tsc`/`eslint`/`nest build` sạch; `KnowledgeRepository` là nơi duy nhất chạm Prisma.
 
-- [ ] **Task 2.2.5: [URGENT REFACTOR] Chuẩn hóa Ownership, Sync Fields, Immutable Hook & Queue Abstraction (Làm ngay trước Auth & Chat)**
+- [x] **Task 2.2.5: [URGENT REFACTOR] Chuẩn hóa Ownership, Sync Fields, Immutable Hook & Queue Abstraction (Làm ngay trước Auth & Chat)**
   > [!IMPORTANT]
   > **Lý do:** Đưa bảng `User`, `userId`, `version` và `deletedAt` (Tombstone) vào Schema và Core Contracts ngay lúc này để `AuthModule` và các module từ Task 2.3 trở đi không bị nợ kỹ thuật.
   - **Cập nhật Prisma Schema (`apps/api/prisma/schema.prisma`):**
-    - Thêm bảng `User` (`id` UUID, `keycloakSubject` unique nullable cho local dev seed, `email`, `displayName`, `emailVerified`, timestamps).
-    - Thêm `userId` (Owner) vào các aggregate gốc: `Document`, `Conversation`, `MemoryRecord` (đổi unique thành `@@unique([userId, key])`), `Plan`, `Workflow`.
-    - Thêm các trường phục vụ E2EE Sync vào các bảng cốt lõi (`Document`, `DocumentChunk`, `Conversation`, `Message`, `MemoryRecord`, `Plan`, `Task`, `Workflow`): `version Int @default(1)`, `contentHash String?`, và `deletedAt DateTime?` (Soft-delete / Tombstone).
-    - Bổ sung metadata `embeddingModel String?` vào `Document` / `DocumentChunk` (giữ cột `embedding vector(768)` cho `pgvector` của Postgres/PGlite) để phục vụ cơ chế Smart Vector Sync.
-    - Viết migration mới.
+    - [x] Thêm bảng `User` (`id` UUID, `keycloakSubject` unique nullable cho local dev seed, `email`, `displayName`, `emailVerified`, timestamps).
+    - [x] Thêm `userId` (Owner) vào các aggregate gốc: `Document`, `Conversation`, `MemoryRecord` (đổi unique thành `@@unique([userId, key])`), `Plan`, `Workflow`.
+    - [x] Thêm các trường phục vụ E2EE Sync vào các bảng cốt lõi (`Document`, `DocumentChunk`, `Conversation`, `Message`, `MemoryRecord`, `Plan`, `Task`, `Workflow`): `version Int @default(1)`, `contentHash String?`, và `deletedAt DateTime?` (Soft-delete / Tombstone).
+    - [x] Bổ sung metadata `embeddingModel String?` vào `Document` / `DocumentChunk` (giữ cột `embedding vector(768)` cho `pgvector` của Postgres/PGlite) để phục vụ cơ chế Smart Vector Sync.
+    - [x] Viết migration mới (`20261117103000_add_ownership_and_sync_fields`).
   - **Cập nhật Core Contracts (`apps/api/src/core/`):**
-    - Bổ sung `readonly userId: string;` vào gốc của `AgentExecutionContext`.
-    - Sửa chữ ký `onBeforePromptBuild?(ctx: AgentExecutionContext): Promise<AgentExecutionContext>` trong `AIOSHookHandler` để đảm bảo tính bất biến thực sự (Immutable Pipeline), cập nhật `ContextBuilder` và `HookRegistry`.
-    - Tạo interface `IJobQueue` tại `core/queue/` để trừu tượng hóa hàng đợi.
+    - [x] Bổ sung `readonly userId: string;` vào gốc của `AgentExecutionContext`.
+    - [x] Sửa chữ ký `onBeforePromptBuild?(ctx: AgentExecutionContext): Promise<AgentExecutionContext>` trong `AIOSHookHandler` để đảm bảo tính bất biến thực sự (Immutable Pipeline), cập nhật `ContextBuilder` và `HookRegistry`.
+    - [x] Tạo interface `IJobQueue` tại `core/queue/` để trừu tượng hóa hàng đợi; `QueueService` hiện thực `IJobQueue`.
+  - *DoD:* 121 unit tests xanh 100%; `pnpm build` (shared-types, api, web) sạch sẽ; schema sẵn sàng cho Task 2.2.6 (`AuthModule`).
 
 - [ ] **Task 2.2.6: Xây dựng Auth Module & Dual-Mode Guard (`modules/auth`)**
   > **Mục tiêu:** Xây dựng cổng xác thực và quản lý `User` projection ngay tại backend để toàn bộ Controller/Service của `Memory`, `Knowledge`, `Chat`, `Planner`, `Workflow` đều dùng chung `@CurrentUser()` và `AuthGuard` một cách thống nhất.
@@ -260,11 +261,10 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
    ```bash
    cd docker && docker compose up -d
    ```
-2. **Thực hiện Task 2.2.5 (Urgent Refactor Schema & Core):**
-   * Cập nhật `apps/api/prisma/schema.prisma`: Thêm bảng `User`, thêm `userId`, `version`, `contentHash`, `deletedAt` (Tombstone) và `embeddingModel` vào các bảng hiện có; giữ cột `embedding vector(768)` cho `pgvector`.
-   * Chạy: `pnpm exec prisma migrate dev --name add_ownership_and_sync_fields`
-   * Cập nhật `AgentExecutionContext` (thêm `readonly userId: string`), sửa `AIOSHookHandler.onBeforePromptBuild` sang trả về `Promise<AgentExecutionContext>`, và định nghĩa `IJobQueue`.
-3. **Thực hiện Task 2.2.6 (`modules/auth`):**
+2. **Đã hoàn thành Task 2.2.5 (Urgent Refactor Schema & Core):**
+   * Đã cập nhật `apps/api/prisma/schema.prisma` và migration `20261117103000_add_ownership_and_sync_fields`.
+   * Đã cập nhật `AgentExecutionContext` (`userId`), `AIOSHookHandler` (`onBeforePromptBuild` Immutable Pipeline), `ContextBuilder`, `HookRegistry`, và `IJobQueue`.
+3. **Thực hiện Task 2.2.6 (`modules/auth`) [VIỆC TIẾP THEO]:**
    * Triển khai `AuthModule`, `AIOSAuthGuard` (`keycloak` + `dev_bypass`), `@CurrentUser()` decorator, và áp dụng ngay vào `MemoryModule` + `KnowledgeModule`.
 4. **Chuyển sang Task 2.3 (`modules/chat`):**
    * Sử dụng `@CurrentUser()` và ghép RAG + Memory + Chat History vào `AgentExecutionContext` qua Immutable Hook Pipeline.

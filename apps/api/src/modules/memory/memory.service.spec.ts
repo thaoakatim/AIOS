@@ -84,6 +84,7 @@ describe('MemoryService', () => {
   it('getRelevantMemory accepts an AgentExecutionContext', async () => {
     repositoryMock.findRecallCandidates.mockResolvedValue([]);
     const result = await service.getRelevantMemory({
+      userId: 'test-user-id',
       executionId: 'exec-1',
       sessionId: '123e4567-e89b-12d3-a456-426614174000',
       query: 'hello',
@@ -130,6 +131,7 @@ describe('MemoryService', () => {
   });
   it('enrichContext merges memory without mutating the original ctx', () => {
     const ctx: Parameters<MemoryService['enrichContext']>[0] = {
+      userId: 'test-user-id',
       executionId: 'exec-1',
       sessionId: 'session-1',
       query: 'Xin chào',

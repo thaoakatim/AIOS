@@ -7,17 +7,24 @@
  *   ("pending" → "processing" → "indexed" | "failed")
  * - `document_chunks.metadata` là JSONB chứa `chunkIndex`, `startOffset`,
  *   `endOffset`, `totalChunks` — dùng để trích dẫn nguồn trong câu trả lời.
+ * - version, contentHash, deletedAt: phục vụ E2EE Sync & Tombstone.
+ * - embeddingModel: phục vụ Smart Vector Sync.
  */
 import { DocumentStatus } from '../enums';
 export { DocumentStatus };
 export interface IDocument {
     id: string;
+    userId?: string;
     title: string;
     /** Định dạng: "pdf" | "md" | "docx" | "txt" | ... */
     fileType: string | null;
     /** Đường dẫn/url file gốc trên Local Storage. */
     sourceUrl: string | null;
     status: string;
+    embeddingModel?: string | null;
+    version?: number;
+    contentHash?: string | null;
+    deletedAt?: Date | null;
     createdAt: Date;
     /** Số chunk đã index. */
     chunkCount?: number;
@@ -27,6 +34,10 @@ export interface IDocumentChunk {
     documentId: string;
     content: string;
     metadata: Record<string, unknown> | null;
+    embeddingModel?: string | null;
+    version?: number;
+    contentHash?: string | null;
+    deletedAt?: Date | null;
 }
 /** Một kết quả Semantic Search đã làm giàu thông tin tài liệu. */
 export interface IKnowledgeSearchHit {

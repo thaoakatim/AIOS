@@ -46,7 +46,7 @@ export interface GetRelevantMemoryOptions {
 export class MemoryService {
   private readonly logger = new Logger(MemoryService.name);
 
-  constructor(private readonly memoryRepository: MemoryRepository) { }
+  constructor(private readonly memoryRepository: MemoryRepository) {}
 
   // ---------------------------------------------------------------- CRUD --
 
@@ -61,9 +61,7 @@ export class MemoryService {
 
     const existing = await this.memoryRepository.findByKey(key);
     if (existing) {
-      throw new ConflictException(
-        `Memory với key "${key}" đã tồn tại.`,
-      );
+      throw new ConflictException(`Memory với key "${key}" đã tồn tại.`);
     }
 
     const created = await this.memoryRepository.create({
