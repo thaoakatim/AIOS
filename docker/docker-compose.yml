@@ -131,7 +131,7 @@ services:
     profiles:
       - tools
     ports:
-      - "${ADMINER_PORT:-8080}:8080"
+      - "${ADMINER_PORT:-8088}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -150,6 +150,39 @@ services:
       REDIS_HOSTS: local:aios-redis:6379:0:${REDIS_PASSWORD:-}
     depends_on:
       redis:
+        condition: service_healthy
+    networks:
+      - aios-network
+
+  # ----------------------------------------------------------------------------
+  # 6. Keycloak (Identity & Access Management - Profile: auth)
+  # Kích hoạt: docker compose --profile auth up -d
+  # Web Admin Console: http://localhost:8080 (admin / admin)
+  # Tự động nạp cấu hình Realm từ ./keycloak/aios-realm.json
+  # ----------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: aios-keycloak
+    restart: unless-stopped
+    profiles:
+      - auth
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB_NAME:-aios_keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-aios_user}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-aios_password}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_HTTP_PORT: 8080
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./keycloak/aios-realm.json:/opt/keycloak/data/import/aios-realm.json:ro
+    depends_on:
+      postgres:
         condition: service_healthy
     networks:
       - aios-network

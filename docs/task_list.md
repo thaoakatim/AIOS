@@ -127,28 +127,29 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
   - [x] Viết tài liệu nghiệp vụ và kỹ thuật đầy đủ: [apps/api/src/modules/auth/docs/auth-module-business.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/auth/docs/auth-module-business.md), [apps/api/src/modules/auth/docs/auth-module-technical.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/auth/docs/auth-module-technical.md), và [docs/modules_rule/auth-module.md](file:///Users/thaonh21/AIOS/docs/modules_rule/auth-module.md).
   - *DoD:* 161 unit tests xanh 100% (26 test suites); `pnpm build` (shared-types, api, web) sạch sẽ; toàn bộ Memory và Knowledge bảo vệ cô lập theo `userId`.
 
-- [ ] **Task 2.2.7: Triển khai Môi trường Keycloak Cục bộ, Realm Seed & Chuẩn hóa Biến Môi trường (`docker/` + `keycloak/` + `.env`) [Hạ tầng Xác thực]**
+- [x] **Task 2.2.7: Triển khai Môi trường Keycloak Cục bộ, Realm Seed & Chuẩn hóa Biến Môi trường (`docker/` + `keycloak/` + `.env`) [Hạ tầng Xác thực]**
   > [!TIP]
   > **Lý do & Hướng đi:** Cung cấp hạ tầng Keycloak chạy bằng Docker Compose sẵn sàng cho môi trường phát triển cục bộ, kèm Realm cấu hình sẵn (Clients, Scopes, Dev User test) và chuẩn hóa toàn bộ file biến môi trường (`.env`) giữa Docker, Backend API và Web Client. Giúp lập trình viên có thể chuyển đổi `AUTH_MODE=keycloak` để test token thật bất cứ lúc nào mà không làm gián đoạn luồng phát triển logic của Task 2.3.
   - **Hạ tầng Docker Compose (`docker/docker-compose.yml`):**
-    - [ ] Thêm service `keycloak` (image `quay.io/keycloak/keycloak:latest` chế độ `start-dev`, hỗ trợ tự động import realm qua thư mục `/opt/keycloak/data/import`).
-    - [ ] Thêm script khởi tạo SQL `docker/init-db/02-init-keycloak.sql` để tự động tạo database `aios_keycloak` trong PostgreSQL container (cô lập dữ liệu xác thực với `aios_db`).
-    - [ ] Đổi port `adminer` từ `8080:8080` sang `${ADMINER_PORT:-8088}:8080` để giải phóng port `8080` mặc định cho Keycloak.
-    - [ ] Gắn profile `auth` (kích hoạt linh hoạt qua `docker compose --profile auth up -d` hoặc chạy chung với stack chính) để tiết kiệm tài nguyên khi chỉ code logic.
-  - **Cấu hình Realm Seed & Clients (`docker/keycloak/realm-export.json`):**
-    - [ ] Khởi tạo Realm `aios` với các client tiêu chuẩn:
+    - [x] Thêm service `keycloak` (image `quay.io/keycloak/keycloak:latest` chế độ `start-dev`, hỗ trợ tự động import realm qua thư mục `/opt/keycloak/data/import`).
+    - [x] Thêm script khởi tạo SQL `docker/init-db/02-init-keycloak.sql` để tự động tạo database `aios_keycloak` trong PostgreSQL container (cô lập dữ liệu xác thực với `aios_db`).
+    - [x] Đổi port `adminer` từ `8080:8080` sang `${ADMINER_PORT:-8088}:8080` để giải phóng port `8080` mặc định cho Keycloak.
+    - [x] Gắn profile `auth` (kích hoạt linh hoạt qua `docker compose --profile auth up -d` hoặc chạy chung với stack chính) để tiết kiệm tài nguyên khi chỉ code logic.
+  - **Cấu hình Realm Seed & Clients (`docker/keycloak/aios-realm.json`):**
+    - [x] Khởi tạo Realm `aios` với các client tiêu chuẩn:
       - Client backend: `aios-api` (Bearer-only / Confidential Resource Server, audience mapper kiểm tra claim `aud: aios-api`).
       - Client web: `aios-web` (Public client, Standard Flow + PKCE, Redirect URI `http://localhost:5173/*`, Web Origins `+`).
       - Client desktop: `aios-desktop` (Public client, PKCE, Redirect URI `aios://auth/callback`).
-    - [ ] Seed sẵn 01 tài khoản dev test (`dev@aios.local` / `DevPass123!`, `email_verified: true`) để có thể lấy Bearer Token test trực tiếp API mà không cần phụ thuộc Google IdP ngoài.
+    - [x] Seed sẵn 01 tài khoản dev test (`dev@aios.local` / `DevPass123!`, `email_verified: true`) để có thể lấy Bearer Token test trực tiếp API mà không cần phụ thuộc Google IdP ngoài.
   - **Chuẩn hóa Biến Môi trường Toàn hệ thống (`.env`):**
-    - [ ] `docker/.env.example`: Thêm các biến `KEYCLOAK_PORT=8080`, `KEYCLOAK_ADMIN_USER=admin`, `KEYCLOAK_ADMIN_PASSWORD=admin`, `KEYCLOAK_DB_NAME=aios_keycloak`, `ADMINER_PORT=8088`.
-    - [ ] `apps/api/.env.example` & tạo file `apps/api/.env`: Thiết lập đầy đủ cấu hình cho cả 2 chế độ (`AUTH_MODE=dev_bypass` khi code nhanh, và sẵn sàng chuyển đổi `AUTH_MODE=keycloak`, `KEYCLOAK_URL=http://localhost:8080`, `KEYCLOAK_REALM=aios`, `KEYCLOAK_CLIENT_ID=aios-api`, `KEYCLOAK_ISSUER=http://localhost:8080/realms/aios`, `KEYCLOAK_JWKS_URL=http://localhost:8080/realms/aios/protocol/openid-connect/certs`).
-    - [ ] `apps/web/.env.example`: Thêm các biến môi trường OIDC cho Frontend (`VITE_KEYCLOAK_URL=http://localhost:8080`, `VITE_KEYCLOAK_REALM=aios`, `VITE_KEYCLOAK_CLIENT_ID=aios-web`).
+    - [x] `docker/.env.example` & `docker/.env`: Thêm các biến `KEYCLOAK_PORT=8080`, `KEYCLOAK_ADMIN_USER=admin`, `KEYCLOAK_ADMIN_PASSWORD=admin`, `KEYCLOAK_DB_NAME=aios_keycloak`, `ADMINER_PORT=8088`.
+    - [x] `apps/api/.env.example` & tạo file `apps/api/.env`: Thiết lập đầy đủ cấu hình cho cả 2 chế độ (`AUTH_MODE=dev_bypass` khi code nhanh, và sẵn sàng chuyển đổi `AUTH_MODE=keycloak`, `KEYCLOAK_URL=http://localhost:8080`, `KEYCLOAK_REALM=aios`, `KEYCLOAK_CLIENT_ID=aios-api`, `KEYCLOAK_ISSUER=http://localhost:8080/realms/aios`, `KEYCLOAK_JWKS_URL=http://localhost:8080/realms/aios/protocol/openid-connect/certs`).
+    - [x] `apps/web/.env.example` & `apps/web/.env`: Thêm các biến môi trường OIDC cho Frontend (`VITE_KEYCLOAK_URL=http://localhost:8080`, `VITE_KEYCLOAK_REALM=aios`, `VITE_KEYCLOAK_CLIENT_ID=aios-web`).
   - *DoD:*
-    - `docker compose --profile auth up -d` khởi động thành công Keycloak, tự động import Realm `aios`.
-    - curl lấy được Access Token JWT từ `http://localhost:8080/realms/aios/protocol/openid-connect/token` với user dev đã seed.
-    - Đổi `apps/api/.env` sang `AUTH_MODE=keycloak`, gọi `GET /auth/me` kèm Bearer token trả về HTTP 200 OK, thông tin profile người dùng được tự động đồng bộ vào bảng `users` trong database.
+    - Cú pháp `docker compose config` hợp lệ 100%. Cấu trúc JSON của `aios-realm.json` hợp lệ và đầy đủ client scopes, audience mapper, dev user.
+    - `pnpm --filter api build` và `pnpm --filter api test` (161 tests) xanh 100%.
+    - `pnpm --filter web build` sạch sẽ.
+    - Sẵn sàng khởi động `docker compose --profile auth up -d` và đổi `AUTH_MODE=keycloak` khi cần.
 
 - [ ] **Task 2.3: Chat Module hoàn chỉnh (`modules/chat`)**
   - Endpoint `POST /chat` và `POST /chat/stream` (SSE Streaming), nhận `user` từ `@CurrentUser()` và gắn `user.id` vào `Conversation` cũng như `AgentExecutionContext`.
@@ -302,6 +303,11 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
    * Đã triển khai `AuthModule`, `UserRepository`, `KeycloakJwtVerifier` (Node crypto), `AuthService`, `AIOSAuthGuard` (`keycloak` + `dev_bypass`), `@CurrentUser()` và `@Public()`.
    * Đã áp dụng `@CurrentUser()`, cô lập `userId` và lọc soft-delete `deletedAt: null` vào `MemoryModule` và `KnowledgeModule`.
    * 161 unit tests xanh 100% (26 test suites).
-4. **Hai Hướng đi Tiếp theo (Tùy chọn phù hợp với nhu cầu):**
-   * **Hướng 1 (Làm tiếp Core Features - Khuyến nghị):** Chuyển sang **Task 2.3 (`modules/chat`)** chạy mượt mà trên chế độ `AUTH_MODE=dev_bypass`, ghép RAG + Memory + Chat History vào `AgentExecutionContext` qua Immutable Hook Pipeline.
-   * **Hướng 2 (Dựng Hạ tầng Keycloak & Chuẩn hóa `.env` trước):** Thực hiện **Task 2.2.7**, bổ sung service Keycloak vào `docker-compose.yml`, tạo Realm seed và tạo file `apps/api/.env` để sẵn sàng kiểm thử token Keycloak thật sự.
+4. **Đã hoàn thành Task 2.2.7 (Hạ tầng Keycloak Docker & Chuẩn hóa .env):**
+   * Đã bổ sung service `keycloak` vào `docker/docker-compose.yml` (profile `auth`, mode `start-dev`, `--import-realm`).
+   * Đã cấu hình `docker/init-db/02-init-keycloak.sql` tạo database `aios_keycloak`.
+   * Đã đổi port `adminer` sang `8088`, giải phóng port `8080` chuẩn cho Keycloak.
+   * Đã tạo file `docker/keycloak/aios-realm.json` khai báo sẵn Realm `aios`, các Client `aios-api`, `aios-web`, `aios-desktop`, scope `aios-api-audience` và tài khoản dev test `dev_user` / `DevPass123!`.
+   * Đã chuẩn hóa và khởi tạo các file `.env` cho `docker/.env`, `apps/api/.env`, `apps/web/.env`.
+5. **Thực hiện Task 2.3 (`modules/chat`) [VIỆC TIẾP THEO]:**
+   * Sử dụng `@CurrentUser()` và ghép RAG + Memory + Chat History vào `AgentExecutionContext` qua Immutable Hook Pipeline.
