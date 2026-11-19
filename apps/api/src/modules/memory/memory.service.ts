@@ -25,6 +25,7 @@ const DEFAULT_RELEVANT_LIMIT = 20;
 const MAX_RECALL_CANDIDATES = 200;
 
 export interface GetRelevantMemoryOptions {
+  userId?: string;
   limit?: number;
   scope?: string;
   category?: string;
@@ -50,7 +51,7 @@ export class MemoryService {
 
   // ---------------------------------------------------------------- CRUD --
 
-  async create(dto: CreateMemoryDto): Promise<Memory> {
+  async create(dto: CreateMemoryDto, userId?: string): Promise<Memory> {
     const key = this.normalizeKey(dto.key);
     const value = this.normalizeValue(dto.value);
     const category = this.normalizeCategory(dto.category);
@@ -59,19 +60,20 @@ export class MemoryService {
       dto.sourceAgentSessionId,
     );
 
-    const existing = await this.memoryRepository.findByKey(key);
+    const existing = await this.memoryRepository.findByKey(key, userId);
     if (existing) {
       throw new ConflictException(`Memory với key "${key}" đã tồn tại.`);
     }
 
     const created = await this.memoryRepository.create({
+      userId,
       key,
       value,
       category,
       scope,
       sourceAgentSessionId,
     });
-    this.logger.log(`Tạo memory mới: key="${key}" category="${category}"`);
+    this.logger.log(`Tạo memory mới: key="${key}" category="${category}" userId="${userId ?? 'default'}"`);
     return Memory.fromPrisma(created);
   }
 
@@ -81,23 +83,28 @@ export class MemoryService {
    */
   async upsert(
     dto: CreateMemoryDto,
+    userId?: string,
   ): Promise<{ data: Memory; created: boolean }> {
     const key = this.normalizeKey(dto.key);
-    const existing = await this.memoryRepository.findByKey(key);
+    const existing = await this.memoryRepository.findByKey(key, userId);
     if (!existing) {
-      const created = await this.create(dto);
+      const created = await this.create(dto, userId);
       return { data: created, created: true };
     }
-    const updated = await this.update(existing.id, {
-      value: dto.value,
-      category: dto.category,
-      scope: dto.scope ?? undefined,
-      sourceAgentSessionId: dto.sourceAgentSessionId,
-    });
+    const updated = await this.update(
+      existing.id,
+      {
+        value: dto.value,
+        category: dto.category,
+        scope: dto.scope ?? undefined,
+        sourceAgentSessionId: dto.sourceAgentSessionId,
+      },
+      userId,
+    );
     return { data: updated, created: false };
   }
 
-  async findAll(filter: QueryMemoryDto = {}): Promise<MemoryListResult> {
+  async findAll(filter: QueryMemoryDto & { userId?: string } = {}): Promise<MemoryListResult> {
     // Validate trước khi xuống repository để lỗi 400 rõ ràng thay vì lỗi DB.
     if (filter.scope !== undefined) this.normalizeScope(filter.scope);
     if (filter.category !== undefined) this.normalizeCategory(filter.category);
@@ -110,6 +117,7 @@ export class MemoryService {
     );
 
     const { records, total } = await this.memoryRepository.findManyAndCount({
+      userId: filter.userId,
       scope:
         filter.scope === undefined
           ? undefined
@@ -127,18 +135,18 @@ export class MemoryService {
     return { data: Memory.fromPrismaMany(records), total };
   }
 
-  async findOne(id: string): Promise<Memory> {
+  async findOne(id: string, userId?: string): Promise<Memory> {
     this.assertUuid(id, 'id');
-    const record = await this.memoryRepository.findById(id);
+    const record = await this.memoryRepository.findById(id, userId);
     if (!record) {
       throw new NotFoundException(`Không tìm thấy memory với id "${id}".`);
     }
     return Memory.fromPrisma(record);
   }
 
-  async findByKey(key: string): Promise<Memory> {
+  async findByKey(key: string, userId?: string): Promise<Memory> {
     const normalized = this.normalizeKey(key);
-    const record = await this.memoryRepository.findByKey(normalized);
+    const record = await this.memoryRepository.findByKey(normalized, userId);
     if (!record) {
       throw new NotFoundException(
         `Không tìm thấy memory với key "${normalized}".`,
@@ -147,9 +155,9 @@ export class MemoryService {
     return Memory.fromPrisma(record);
   }
 
-  async update(id: string, dto: UpdateMemoryDto): Promise<Memory> {
+  async update(id: string, dto: UpdateMemoryDto, userId?: string): Promise<Memory> {
     this.assertUuid(id, 'id');
-    const existing = await this.memoryRepository.findById(id);
+    const existing = await this.memoryRepository.findById(id, userId);
     if (!existing) {
       throw new NotFoundException(`Không tìm thấy memory với id "${id}".`);
     }
@@ -180,9 +188,9 @@ export class MemoryService {
     return Memory.fromPrisma(updated);
   }
 
-  async remove(id: string): Promise<Memory> {
+  async remove(id: string, userId?: string): Promise<Memory> {
     this.assertUuid(id, 'id');
-    const existing = await this.memoryRepository.findById(id);
+    const existing = await this.memoryRepository.findById(id, userId);
     if (!existing) {
       throw new NotFoundException(`Không tìm thấy memory với id "${id}".`);
     }
@@ -216,6 +224,7 @@ export class MemoryService {
     }
 
     const candidates = await this.memoryRepository.findRecallCandidates({
+      userId: options.userId,
       category,
       scope,
       sessionId: options.sessionId,
@@ -269,15 +278,17 @@ export class MemoryService {
       scope: options.scope,
       category: options.category,
       limit: options.limit,
+      userId: ctxOrQuery.userId ?? options.userId,
     };
     return this.recall(ctxOrQuery.query ?? '', merged);
   }
 
   /** DTO tiện lợi cho `GET /memory/relevant` (query params). */
   async getRelevantMemoryByQuery(
-    queryDto: RelevantMemoryQueryDto,
+    queryDto: RelevantMemoryQueryDto & { userId?: string },
   ): Promise<Memory[]> {
     return this.recall(queryDto.query ?? '', {
+      userId: queryDto.userId,
       sessionId: queryDto.sessionId,
       scope: queryDto.scope,
       category: queryDto.category,

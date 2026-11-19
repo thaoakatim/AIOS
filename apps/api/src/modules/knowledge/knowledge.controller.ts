@@ -24,12 +24,16 @@ import {
 } from './dto/query-knowledge.dto';
 import { UpdateDocumentDto } from './dto/update-knowledge.dto';
 import { KnowledgeService } from './knowledge.service';
+import { CurrentUser } from '../auth';
+import type { AuthenticatedUser } from '../auth';
 
 /**
  * REST API của Knowledge & RAG Module (Task 2.2).
  *
+ * Mọi endpoint đều được bảo vệ bởi AIOSAuthGuard và tự động inject `@CurrentUser()`.
+ *
  * Lưu ý thứ tự khai báo route: NestJS khớp theo thứ tự, nên mọi route tĩnh
- * (`search`, `context`, `messages/:id/documents`) PHẢI nằm TRƯỚC `:id` để
+ * (`search`, `context`, `messages/:id/documents`, `stats`) PHẢI nằm TRƯỚC `:id` để
  * không bị nuốt nhầm vào route có tham số động.
  *
  * Multer được cấu hình `memoryStorage` (giữ file trong RAM) để pipeline RAG
@@ -62,11 +66,13 @@ export class KnowledgeController {
   upload(
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadDocumentDto,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
     return this.knowledgeService.upload(file, {
       ...dto,
       // `messageIds` tới từ multipart là string -> parse lại thành mảng.
       messageIds: this.parseIdList(dto.messageIds),
+      userId: user?.id,
     });
   }
 
@@ -84,6 +90,7 @@ export class KnowledgeController {
     @Query('limit') limit?: string,
     @Query('minScore') minScore?: string,
     @Query('documentId') documentId?: string,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
     const dto: SearchKnowledgeDto = {
       query: query ?? aliasQuery,
@@ -91,7 +98,7 @@ export class KnowledgeController {
       minScore: minScore !== undefined ? Number(minScore) : undefined,
       documentId,
     };
-    return this.knowledgeService.search(dto);
+    return this.knowledgeService.search({ ...dto, userId: user?.id });
   }
 
   /**
@@ -105,6 +112,7 @@ export class KnowledgeController {
     @Query('limit') limit?: string,
     @Query('minScore') minScore?: string,
     @Query('documentId') documentId?: string,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
     const dto: RelevantChunksQueryDto = {
       query,
@@ -114,7 +122,7 @@ export class KnowledgeController {
     };
     const chunks = await this.knowledgeService.getRelevantChunks(
       query ?? '',
-      dto,
+      { ...dto, userId: user?.id },
     );
     return {
       chunks,
@@ -154,8 +162,8 @@ export class KnowledgeController {
 
   /** Thống kê pipeline: số tài liệu theo trạng thái + model embedding đang dùng. */
   @Get('stats')
-  stats() {
-    return this.knowledgeService.stats();
+  stats(@CurrentUser() user?: AuthenticatedUser) {
+    return user ? this.knowledgeService.stats(user.id) : this.knowledgeService.stats();
   }
 
   // --------------------------------------------------------------- CRUD --
@@ -167,6 +175,7 @@ export class KnowledgeController {
     @Query('search') search?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
     const filter: QueryDocumentDto = {
       status,
@@ -175,18 +184,19 @@ export class KnowledgeController {
       limit: limit !== undefined ? Number(limit) : undefined,
       offset: offset !== undefined ? Number(offset) : undefined,
     };
+    if (user?.id) filter.userId = user.id;
     return this.knowledgeService.findAll(filter);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.knowledgeService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
+    return user ? this.knowledgeService.findOne(id, user.id) : this.knowledgeService.findOne(id);
   }
 
   /** Xem các chunk đã index của một tài liệu (debug RAG). */
   @Get(':id/chunks')
-  findChunks(@Param('id') id: string) {
-    return this.knowledgeService.findChunks(id);
+  findChunks(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
+    return user ? this.knowledgeService.findChunks(id, user.id) : this.knowledgeService.findChunks(id);
   }
 
   /** Message nào đang đính kèm tài liệu này (truy vết ngược). */
@@ -198,19 +208,31 @@ export class KnowledgeController {
   /** Chạy lại pipeline cho tài liệu đã có (đổi model/kiểu chunk, retry khi fail). */
   @Post(':id/reindex')
   @HttpCode(HttpStatus.OK)
-  reindex(@Param('id') id: string, @Body() dto: ReindexDocumentDto) {
-    return this.knowledgeService.ingest(id, dto);
+  reindex(
+    @Param('id') id: string,
+    @Body() dto: ReindexDocumentDto,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    return user
+      ? this.knowledgeService.ingest(id, dto, user.id)
+      : this.knowledgeService.ingest(id, dto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateDocumentDto) {
-    return this.knowledgeService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateDocumentDto,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    return user
+      ? this.knowledgeService.update(id, dto, user.id)
+      : this.knowledgeService.update(id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  remove(@Param('id') id: string) {
-    return this.knowledgeService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
+    return user ? this.knowledgeService.remove(id, user.id) : this.knowledgeService.remove(id);
   }
 
   // ------------------------------------------------------------ Helpers --

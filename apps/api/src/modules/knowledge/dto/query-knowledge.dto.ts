@@ -3,6 +3,8 @@
  * Tất cả trường optional — service áp giá trị mặc định an toàn.
  */
 export class QueryDocumentDto {
+  /** ID người dùng sở hữu tài liệu. */
+  userId?: string;
   /** "pending" | "processing" | "indexed" | "failed" */
   status?: string;
   /** "pdf" | "md" | "docx" | "txt" | ... */
@@ -17,6 +19,9 @@ export class QueryDocumentDto {
 
 /** Query cho `GET /knowledge/search` (Semantic Search). */
 export class SearchKnowledgeDto {
+  /** ID người dùng thực hiện tìm kiếm (lọc dữ liệu theo sở hữu). */
+  userId?: string;
+
   /** Câu hỏi/cụm từ cần tra cứu. Bắt buộc — service trả 400 nếu rỗng. */
   query?: string;
 
@@ -32,6 +37,8 @@ export class SearchKnowledgeDto {
 
 /** Tùy chọn truy hồi chunk cho AgentExecutionContext (Task 2.3). */
 export class RelevantChunksQueryDto {
+  /** ID người dùng sở hữu tài liệu. */
+  userId?: string;
   /** Câu truy vấn; bỏ trống sẽ dùng query của agent context. */
   query?: string;
   /** Số chunk trả về (mặc định 5, tối đa 50). */

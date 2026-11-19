@@ -111,6 +111,7 @@ describe('KnowledgeRepository', () => {
 
     expect(prismaMock.document.findMany).toHaveBeenCalledWith({
       where: {
+        deletedAt: null,
         status: 'indexed',
         fileType: 'md',
         title: { contains: 'arch', mode: 'insensitive' },
@@ -122,6 +123,7 @@ describe('KnowledgeRepository', () => {
     });
     expect(prismaMock.document.count).toHaveBeenCalledWith({
       where: {
+        deletedAt: null,
         status: 'indexed',
         fileType: 'md',
         title: { contains: 'arch', mode: 'insensitive' },

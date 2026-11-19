@@ -70,23 +70,23 @@ describe('MemoryRepository', () => {
     });
   });
 
-  it('findByKey calls findUnique with compound key when userId is provided', async () => {
-    prismaMock.memoryRecord.findUnique.mockResolvedValue({ id: 'id-1' });
+  it('findByKey calls findFirst with compound key and deletedAt null when userId is provided', async () => {
+    prismaMock.memoryRecord.findFirst.mockResolvedValue({ id: 'id-1' });
     await repository.findByKey('user.name', 'user-1');
-    expect(prismaMock.memoryRecord.findUnique).toHaveBeenCalledWith({
-      where: { userId_key: { userId: 'user-1', key: 'user.name' } },
+    expect(prismaMock.memoryRecord.findFirst).toHaveBeenCalledWith({
+      where: { userId: 'user-1', key: 'user.name', deletedAt: null },
     });
   });
 
-  it('findByKey calls findFirst when userId is omitted', async () => {
+  it('findByKey calls findFirst with deletedAt null when userId is omitted', async () => {
     prismaMock.memoryRecord.findFirst.mockResolvedValue({ id: 'id-1' });
     await repository.findByKey('user.name');
     expect(prismaMock.memoryRecord.findFirst).toHaveBeenCalledWith({
-      where: { key: 'user.name' },
+      where: { key: 'user.name', deletedAt: null },
     });
   });
 
-  it('findManyAndCount builds search where clause and paginates', async () => {
+  it('findManyAndCount builds search where clause with deletedAt null and paginates', async () => {
     prismaMock.memoryRecord.findMany.mockResolvedValue([]);
     prismaMock.memoryRecord.count.mockResolvedValue(0);
 
@@ -98,6 +98,7 @@ describe('MemoryRepository', () => {
 
     expect(prismaMock.memoryRecord.findMany).toHaveBeenCalledWith({
       where: {
+        deletedAt: null,
         OR: [
           { key: { contains: 'phở', mode: 'insensitive' } },
           { value: { contains: 'phở', mode: 'insensitive' } },
@@ -110,7 +111,7 @@ describe('MemoryRepository', () => {
     expect(prismaMock.memoryRecord.count).toHaveBeenCalled();
   });
 
-  it('findRecallCandidates scopes to global + own conversation session', async () => {
+  it('findRecallCandidates scopes to global + own conversation session with deletedAt null', async () => {
     prismaMock.memoryRecord.findMany.mockResolvedValue([]);
     const sessionId = '123e4567-e89b-12d3-a456-426614174000';
 
@@ -118,6 +119,7 @@ describe('MemoryRepository', () => {
 
     expect(prismaMock.memoryRecord.findMany).toHaveBeenCalledWith({
       where: {
+        deletedAt: null,
         OR: [
           { scope: 'global' },
           { scope: 'conversation', sourceAgentSessionId: sessionId },

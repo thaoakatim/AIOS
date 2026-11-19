@@ -14,10 +14,14 @@ import { CreateMemoryDto } from './dto/create-memory.dto';
 import { QueryMemoryDto, RelevantMemoryQueryDto } from './dto/query-memory.dto';
 import { UpdateMemoryDto } from './dto/update-memory.dto';
 import { MemoryService } from './memory.service';
+import { CurrentUser } from '../auth';
+import type { AuthenticatedUser } from '../auth';
 
 /**
  * REST API quản lý ký ức dài hạn (Memory Board cho Dashboard + backend
  * cho Chat Context Builder ở Task 2.3).
+ *
+ * Mọi endpoint đều được bảo vệ bởi AIOSAuthGuard và tự động inject `@CurrentUser()`.
  *
  * Lưu ý thứ tự route: các route tĩnh (`relevant`, `key/:key`, `upsert`,
  * `context-profile`) phải khai báo TRƯỚC `:id` để NestJS không nhầm
@@ -28,8 +32,11 @@ export class MemoryController {
   constructor(private readonly memoryService: MemoryService) {}
 
   @Post()
-  create(@Body() createMemoryDto: CreateMemoryDto) {
-    return this.memoryService.create(createMemoryDto);
+  create(
+    @Body() createMemoryDto: CreateMemoryDto,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    return this.memoryService.create(createMemoryDto, user?.id);
   }
 
   /**
@@ -38,8 +45,11 @@ export class MemoryController {
    */
   @Post('upsert')
   @HttpCode(HttpStatus.OK)
-  upsert(@Body() createMemoryDto: CreateMemoryDto) {
-    return this.memoryService.upsert(createMemoryDto);
+  upsert(
+    @Body() createMemoryDto: CreateMemoryDto,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    return this.memoryService.upsert(createMemoryDto, user?.id);
   }
 
   @Get()
@@ -50,6 +60,7 @@ export class MemoryController {
     @Query('sourceAgentSessionId') sourceAgentSessionId?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
     const filter: QueryMemoryDto = {
       scope,
@@ -59,7 +70,7 @@ export class MemoryController {
       limit: limit !== undefined ? Number(limit) : undefined,
       offset: offset !== undefined ? Number(offset) : undefined,
     };
-    return this.memoryService.findAll(filter);
+    return this.memoryService.findAll({ ...filter, userId: user?.id });
   }
 
   /**
@@ -74,6 +85,7 @@ export class MemoryController {
     @Query('scope') scope?: string,
     @Query('category') category?: string,
     @Query('limit') limit?: string,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
     const dto: RelevantMemoryQueryDto = {
       query,
@@ -82,7 +94,10 @@ export class MemoryController {
       category,
       limit: limit !== undefined ? Number(limit) : undefined,
     };
-    return this.memoryService.getRelevantMemoryByQuery(dto);
+    return this.memoryService.getRelevantMemoryByQuery({
+      ...dto,
+      userId: user?.id,
+    });
   }
 
   /**
@@ -96,6 +111,7 @@ export class MemoryController {
     @Query('scope') scope?: string,
     @Query('category') category?: string,
     @Query('limit') limit?: string,
+    @CurrentUser() user?: AuthenticatedUser,
   ) {
     const memories = await this.memoryService.getRelevantMemoryByQuery({
       query,
@@ -103,6 +119,7 @@ export class MemoryController {
       scope,
       category,
       limit: limit !== undefined ? Number(limit) : undefined,
+      userId: user?.id,
     });
     return {
       userProfile: this.memoryService.buildUserProfile(memories),
@@ -112,23 +129,30 @@ export class MemoryController {
   }
 
   @Get('key/:key')
-  findByKey(@Param('key') key: string) {
-    return this.memoryService.findByKey(key);
+  findByKey(
+    @Param('key') key: string,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    return this.memoryService.findByKey(key, user?.id);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.memoryService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
+    return this.memoryService.findOne(id, user?.id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateMemoryDto: UpdateMemoryDto) {
-    return this.memoryService.update(id, updateMemoryDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateMemoryDto: UpdateMemoryDto,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    return this.memoryService.update(id, updateMemoryDto, user?.id);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  remove(@Param('id') id: string) {
-    return this.memoryService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
+    return this.memoryService.remove(id, user?.id);
   }
 }

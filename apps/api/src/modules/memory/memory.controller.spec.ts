@@ -36,7 +36,15 @@ describe('MemoryController', () => {
     memoryServiceMock.create.mockResolvedValue({ id: 'id-1' });
     const dto = { key: 'user.name', value: 'Huy', category: 'profile' };
     await expect(controller.create(dto)).resolves.toEqual({ id: 'id-1' });
-    expect(memoryServiceMock.create).toHaveBeenCalledWith(dto);
+    expect(memoryServiceMock.create).toHaveBeenCalledWith(dto, undefined);
+  });
+
+  it('create passes authenticated user id when user is provided', async () => {
+    memoryServiceMock.create.mockResolvedValue({ id: 'id-2' });
+    const dto = { key: 'user.theme', value: 'dark', category: 'preference' };
+    const user = { id: 'u-123' } as any;
+    await expect(controller.create(dto, user)).resolves.toEqual({ id: 'id-2' });
+    expect(memoryServiceMock.create).toHaveBeenCalledWith(dto, 'u-123');
   });
 
   it('getRelevant maps query params to RelevantMemoryQueryDto', async () => {
@@ -48,6 +56,7 @@ describe('MemoryController', () => {
       scope: undefined,
       category: undefined,
       limit: 5,
+      userId: undefined,
     });
   });
 });

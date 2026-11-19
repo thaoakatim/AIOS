@@ -5,6 +5,8 @@ import { DEFAULT_LOCAL_USER_ID } from '../../core/auth/default-user';
 
 /** Tham số lọc danh sách tài liệu — service truyền giá trị đã validate. */
 export interface FindDocumentsParams {
+  userId?: string;
+  includeDeleted?: boolean;
   status?: string;
   fileType?: string;
   /** Tìm tương đối (case-insensitive) trên `title`. */
@@ -67,9 +69,12 @@ export class KnowledgeRepository {
 
   findDocumentById(
     id: string,
+    userId?: string,
   ): Promise<(Document & { _count: { chunks: number } }) | null> {
-    return this.prisma.document.findUnique({
-      where: { id },
+    const where: Prisma.DocumentWhereInput = { id, deletedAt: null };
+    if (userId) where.userId = userId;
+    return this.prisma.document.findFirst({
+      where,
       include: { _count: { select: { chunks: true } } },
     });
   }
@@ -103,13 +108,19 @@ export class KnowledgeRepository {
   }
 
   deleteDocument(id: string): Promise<Document> {
-    return this.prisma.document.delete({ where: { id } });
+    return this.prisma.document.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   /** Đếm tài liệu theo trạng thái — dùng cho Dashboard/Health check. */
-  async countDocumentsByStatus(): Promise<Record<string, number>> {
+  async countDocumentsByStatus(userId?: string): Promise<Record<string, number>> {
+    const where: Prisma.DocumentWhereInput = { deletedAt: null };
+    if (userId) where.userId = userId;
     const grouped = await this.prisma.document.groupBy({
       by: ['status'],
+      where,
       _count: { _all: true },
     });
     return grouped.reduce<Record<string, number>>((acc, row) => {
@@ -252,6 +263,12 @@ export class KnowledgeRepository {
     params: FindDocumentsParams,
   ): Prisma.DocumentWhereInput {
     const where: Prisma.DocumentWhereInput = {};
+    if (params.includeDeleted !== true) {
+      where.deletedAt = null;
+    }
+    if (params.userId !== undefined) {
+      where.userId = params.userId;
+    }
     if (params.status !== undefined) where.status = params.status;
     if (params.fileType !== undefined) where.fileType = params.fileType;
     const search = params.search?.trim();

@@ -8,6 +8,8 @@ import { DEFAULT_LOCAL_USER_ID } from '../../core/auth/default-user';
  * repository chịu trách nhiệm dịch sang câu truy vấn Prisma.
  */
 export interface FindMemoriesParams {
+  userId?: string;
+  includeDeleted?: boolean;
   scope?: string;
   category?: string;
   /** Tìm tương đối (case-insensitive) trên cả `key` và `value`. */
@@ -19,6 +21,8 @@ export interface FindMemoriesParams {
 }
 
 export interface FindRecallCandidatesParams {
+  userId?: string;
+  includeDeleted?: boolean;
   category?: string;
   scope?: string;
   /** Session hiện tại — lấy global + conversation của chính session này. */
@@ -71,18 +75,20 @@ export class MemoryRepository {
     });
   }
 
-  findById(id: string): Promise<MemoryRecord | null> {
-    return this.prisma.memoryRecord.findUnique({ where: { id } });
+  findById(id: string, userId?: string): Promise<MemoryRecord | null> {
+    const where: Prisma.MemoryRecordWhereInput = { id, deletedAt: null };
+    if (userId) where.userId = userId;
+    return this.prisma.memoryRecord.findFirst({ where });
   }
 
   findByKey(key: string, userId?: string): Promise<MemoryRecord | null> {
     if (userId) {
-      return this.prisma.memoryRecord.findUnique({
-        where: { userId_key: { userId, key } },
+      return this.prisma.memoryRecord.findFirst({
+        where: { userId, key, deletedAt: null },
       });
     }
     return this.prisma.memoryRecord.findFirst({
-      where: { key },
+      where: { key, deletedAt: null },
     });
   }
 
@@ -131,7 +137,10 @@ export class MemoryRepository {
   }
 
   deleteById(id: string): Promise<MemoryRecord> {
-    return this.prisma.memoryRecord.delete({ where: { id } });
+    return this.prisma.memoryRecord.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 
   async agentSessionExists(id: string): Promise<boolean> {
@@ -148,6 +157,12 @@ export class MemoryRepository {
     params: FindMemoriesParams,
   ): Prisma.MemoryRecordWhereInput {
     const where: Prisma.MemoryRecordWhereInput = {};
+    if (params.includeDeleted !== true) {
+      where.deletedAt = null;
+    }
+    if (params.userId !== undefined) {
+      where.userId = params.userId;
+    }
     if (params.scope !== undefined) where.scope = params.scope;
     if (params.category !== undefined) where.category = params.category;
     if (params.sourceAgentSessionId !== undefined) {
@@ -172,6 +187,12 @@ export class MemoryRepository {
     params: FindRecallCandidatesParams,
   ): Prisma.MemoryRecordWhereInput {
     const where: Prisma.MemoryRecordWhereInput = {};
+    if (params.includeDeleted !== true) {
+      where.deletedAt = null;
+    }
+    if (params.userId !== undefined) {
+      where.userId = params.userId;
+    }
     if (params.category !== undefined) where.category = params.category;
     if (params.scope !== undefined) {
       where.scope = params.scope;

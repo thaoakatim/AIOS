@@ -10,6 +10,7 @@ import { AgentsModule } from './modules/agents/agents.module';
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { ToolsModule } from './modules/tools/tools.module';
 import { InfrastructureModule } from './infrastructure/infrastructure.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module';
     WorkflowModule,
     AgentsModule,
     ToolsModule,
+    AuthModule,
   ],
   controllers: [],
   providers: [],

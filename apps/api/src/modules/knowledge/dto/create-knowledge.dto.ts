@@ -6,6 +6,9 @@
  * Memory Module.
  */
 export class UploadDocumentDto {
+  /** ID người dùng sở hữu tài liệu (do AIOSAuthGuard inject). */
+  userId?: string;
+
   /** Tiêu đề hiển thị. Bỏ trống sẽ suy ra từ tên file gốc. */
   title?: string;
 

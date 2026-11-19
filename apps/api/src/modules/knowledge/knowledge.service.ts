@@ -148,6 +148,7 @@ export class KnowledgeService {
       fileType,
       sourceUrl: stored.url,
       status: initialStatus,
+      userId: dto.userId,
     });
 
     // 3) Gắn vào các Message được chỉ định (bảng MessageDocument — Task 2.2).
@@ -215,8 +216,12 @@ export class KnowledgeService {
    * Chạy pipeline cho một Document đã tồn tại (dùng cho `reindex` và cho
    * BullMQ worker). Đọc lại file gốc từ Local Storage theo `sourceUrl`.
    */
-  async ingest(documentId: string, options: ReindexDocumentDto = {}) {
-    const document = await this.repository.findDocumentById(documentId);
+  async ingest(
+    documentId: string,
+    options: ReindexDocumentDto = {},
+    userId?: string,
+  ) {
+    const document = await this.repository.findDocumentById(documentId, userId);
     if (!document) {
       throw new NotFoundException(
         `Không tìm thấy tài liệu với id "${documentId}".`,
@@ -412,7 +417,7 @@ export class KnowledgeService {
    * Luồng: query → Embedding → Vector Store (cosine similarity) →
    * hydrate metadata/nội dung từ PostgreSQL → sắp xếp theo điểm tương đồng.
    */
-  async search(dto: SearchKnowledgeDto): Promise<KnowledgeSearchResult> {
+  async search(dto: SearchKnowledgeDto & { userId?: string }): Promise<KnowledgeSearchResult> {
     const query = (dto.query ?? '').trim();
     if (!query) {
       throw new BadRequestException(
@@ -444,8 +449,8 @@ export class KnowledgeService {
       filter,
     );
 
-    // 3) Hydrate nội dung + tiêu đề tài liệu từ PostgreSQL.
-    const enriched = await this.hydrateHits(hits, minScore, limit);
+    // 3) Hydrate nội dung + tiêu đề tài liệu từ PostgreSQL (kèm lọc ownership và soft-delete).
+    const enriched = await this.hydrateHits(hits, minScore, limit, dto.userId);
 
     return {
       query,
@@ -463,6 +468,7 @@ export class KnowledgeService {
     hits: SearchResult[],
     minScore: number,
     limit: number,
+    userId?: string,
   ): Promise<KnowledgeSearchHit[]> {
     if (hits.length === 0) return [];
 
@@ -478,12 +484,17 @@ export class KnowledgeService {
       ),
     ];
 
-    const [chunks, documents] = await Promise.all([
+    const [chunks, rawDocuments] = await Promise.all([
       this.repository.findChunksByIds(chunkIds),
       documentIds.length > 0
         ? this.repository.findDocumentsByIds(documentIds)
         : Promise.resolve([]),
     ]);
+
+    // Lọc theo quyền sở hữu và bỏ qua các tài liệu đã bị xóa mềm (deletedAt !== null)
+    const documents = rawDocuments.filter(
+      (doc) => (userId ? doc.userId === userId : true) && !doc.deletedAt,
+    );
 
     const chunkById = new Map(chunks.map((chunk) => [chunk.id, chunk]));
     const titleById = new Map(documents.map((doc) => [doc.id, doc.title]));
@@ -493,21 +504,23 @@ export class KnowledgeService {
       if (result.length >= limit) break;
       const chunk = chunkById.get(hit.id);
       if (!chunk) continue; // Chunk đã bị xoá khỏi DB -> bỏ qua.
-      // Payload của vector store là `Record<string, unknown>` nên phải ép kiểu
-      // tường minh thay vì `String(...)` (tránh "[object Object]" khi value
-      // không phải chuỗi).
+
       const payloadDocumentId = hit.payload?.documentId;
       const documentId =
         typeof payloadDocumentId === 'string'
           ? payloadDocumentId
           : chunk.documentId;
+
+      // Nếu tài liệu không thuộc quyền sở hữu của user hoặc đã bị xóa mềm -> bỏ qua
+      if (!titleById.has(documentId)) continue;
+
       const metadata = (chunk.metadata ?? {}) as Record<string, unknown>;
       const rawIndex = metadata.chunkIndex;
 
       result.push({
         chunkId: chunk.id,
         documentId,
-        documentTitle: titleById.get(documentId) ?? 'Tài liệu đã xoá',
+        documentTitle: titleById.get(documentId)!,
         content: chunk.content,
         score: Number(hit.score),
         chunkIndex:
@@ -726,7 +739,7 @@ export class KnowledgeService {
   // ----------------------------------------------------------------- CRUD --
 
   /** Danh sách tài liệu cho Knowledge Hub (có phân trang + lọc trạng thái). */
-  async findAll(filter: QueryDocumentDto = {}): Promise<KnowledgeListResult> {
+  async findAll(filter: QueryDocumentDto & { userId?: string } = {}): Promise<KnowledgeListResult> {
     if (filter.status !== undefined) this.normalizeStatus(filter.status);
     const { limit, offset } = this.normalizePagination(
       filter.limit,
@@ -734,6 +747,7 @@ export class KnowledgeService {
     );
 
     const { records, total } = await this.repository.findDocumentsAndCount({
+      userId: filter.userId,
       status:
         filter.status === undefined
           ? undefined
@@ -747,9 +761,9 @@ export class KnowledgeService {
     return { data: KnowledgeDocument.fromPrismaMany(records), total };
   }
 
-  async findOne(id: string): Promise<KnowledgeDocument> {
+  async findOne(id: string, userId?: string): Promise<KnowledgeDocument> {
     this.assertUuid(id, 'id');
-    const document = await this.repository.findDocumentById(id);
+    const document = await this.repository.findDocumentById(id, userId);
     if (!document) {
       throw new NotFoundException(`Không tìm thấy tài liệu với id "${id}".`);
     }
@@ -757,18 +771,18 @@ export class KnowledgeService {
   }
 
   /** Chunk của một tài liệu, sắp theo `metadata.chunkIndex`. */
-  async findChunks(documentId: string): Promise<KnowledgeChunk[]> {
+  async findChunks(documentId: string, userId?: string): Promise<KnowledgeChunk[]> {
     this.assertUuid(documentId, 'documentId');
-    await this.findOne(documentId);
+    await this.findOne(documentId, userId);
     const chunks = await this.repository.findChunksByDocumentId(documentId);
     return KnowledgeChunk.fromPrismaMany(chunks).sort(
       (a, b) => a.chunkIndex - b.chunkIndex,
     );
   }
 
-  async update(id: string, dto: UpdateDocumentDto): Promise<KnowledgeDocument> {
+  async update(id: string, dto: UpdateDocumentDto, userId?: string): Promise<KnowledgeDocument> {
     this.assertUuid(id, 'id');
-    await this.findOne(id);
+    await this.findOne(id, userId);
     const updated = await this.repository.updateDocument(id, {
       title:
         dto.title === undefined ? undefined : this.normalizeTitle(dto.title),
@@ -784,9 +798,9 @@ export class KnowledgeService {
    * collection riêng nên phải xoá thủ công; với pgvector, adapter xoá theo id
    * chunk trên cùng bảng — cả hai đều an toàn khi gọi trước.
    */
-  async remove(id: string): Promise<KnowledgeDocument> {
+  async remove(id: string, userId?: string): Promise<KnowledgeDocument> {
     this.assertUuid(id, 'id');
-    const document = await this.findOne(id);
+    const document = await this.findOne(id, userId);
 
     const chunks = await this.repository.findChunksByDocumentId(id);
     if (chunks.length > 0) {
@@ -808,13 +822,13 @@ export class KnowledgeService {
   }
 
   /** Thống kê nhanh cho Health check / Dashboard. */
-  async stats(): Promise<{
+  async stats(userId?: string): Promise<{
     documentsByStatus: Record<string, number>;
     embedding: { provider: string; model: string; dimensions: number };
     collection: string;
   }> {
     return {
-      documentsByStatus: await this.repository.countDocumentsByStatus(),
+      documentsByStatus: await this.repository.countDocumentsByStatus(userId),
       embedding: {
         provider: this.embeddingGateway.getProvider(),
         model: this.embeddingGateway.getModel(),
