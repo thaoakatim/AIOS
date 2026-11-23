@@ -1,0 +1,1 @@
+export const CHAT_HOOK_REGISTRY = Symbol('CHAT_HOOK_REGISTRY');

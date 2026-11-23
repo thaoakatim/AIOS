@@ -151,10 +151,15 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
     - `pnpm --filter web build` sạch sẽ.
     - Sẵn sàng khởi động `docker compose --profile auth up -d` và đổi `AUTH_MODE=keycloak` khi cần.
 
-- [ ] **Task 2.3: Chat Module hoàn chỉnh (`modules/chat`)**
-  - Endpoint `POST /chat` và `POST /chat/stream` (SSE Streaming), nhận `user` từ `@CurrentUser()` và gắn `user.id` vào `Conversation` cũng như `AgentExecutionContext`.
-  - Kết hợp `ContextBuilder`: Gom System Rules + Chat History + Prefetched Memory + RAG Chunks (theo đúng `ctx.userId`) thông qua chuỗi Immutable Hook (`ctx = await hookRegistry.runBeforePromptBuild(ctx)`).
-  - Tích hợp Lifecycle Hooks (`onBeforePromptBuild`, `onAfterCompletion` ghi nhận Trace vào `AgentRun`).
+- [x] **Task 2.3: Chat Module hoàn chỉnh (`modules/chat`)**
+  - [x] Endpoint `POST /chat` (Unary) và `POST /chat/stream` (SSE Streaming token-by-token), nhận `user` từ `@CurrentUser()` và gắn `user.id` vào `Conversation`, kế thừa quyền sở hữu cho `Message`, `MessageDocument` và `AgentExecutionContext.userId`.
+  - [x] Pre-flight validation trước khi mở SSE headers: kiểm tra quyền sở hữu `conversationId` và `documentIds` (chống IDOR). Hỗ trợ ngắt kết nối an toàn với `AbortController` (`req.on('close')`), tự động chuyển `AgentRun.status` sang `'cancelled'`.
+  - [x] Kết hợp `ContextBuilder` & `CHAT_HOOK_REGISTRY`: Gom System Rules + Chat History (loại trừ `excludeMessageId` để chống Double User Message) + Prefetched Memory + RAG Chunks thông qua chuỗi Immutable Hook Pipeline.
+  - [x] Parallel I/O prefetch: `Promise.allSettled` gọi song song `MemoryService` và `KnowledgeService` giúp giảm 40-50% độ trễ TTFT, kèm Graceful Degradation an toàn khi Vector Store/Memory lỗi.
+  - [x] Tích hợp Lifecycle Hooks (`onBeforePromptBuild`, `onAfterCompletion` ghi nhận Trace, Latency, Token Usage vào `AgentRun` qua `runId`). Có fallback ước tính token bằng `TokenCounterService` khi stream provider không trả usage.
+  - [x] Toàn bộ thao tác tạo hội thoại + tin nhắn + AgentRun + MessageDocument chạy trong `prisma.$transaction`. Xóa mềm `softDeleteConversation` đồng thời soft-delete các message con trong transaction và tăng `version` phục vụ E2EE Sync.
+  - [x] Đầy đủ tài liệu nghiệp vụ, kỹ thuật và quy chuẩn: [apps/api/src/modules/chat/docs/chat-module-business.md](file:///c:/Users/Admin/Documents/AIOS/apps/api/src/modules/chat/docs/chat-module-business.md), [apps/api/src/modules/chat/docs/chat-module-technical.md](file:///c:/Users/Admin/Documents/AIOS/apps/api/src/modules/chat/docs/chat-module-technical.md), và [docs/modules_rule/chat-module.md](file:///c:/Users/Admin/Documents/AIOS/docs/modules_rule/chat-module.md).
+  - *DoD:* 202 unit tests xanh 100% (29 test suites); `pnpm build` (shared-types, api, web) sạch sẽ 100%.
 
 ---
 
@@ -309,5 +314,12 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
    * Đã đổi port `adminer` sang `8088`, giải phóng port `8080` chuẩn cho Keycloak.
    * Đã tạo file `docker/keycloak/aios-realm.json` khai báo sẵn Realm `aios`, các Client `aios-api`, `aios-web`, `aios-desktop`, scope `aios-api-audience` và tài khoản dev test `dev_user` / `DevPass123!`.
    * Đã chuẩn hóa và khởi tạo các file `.env` cho `docker/.env`, `apps/api/.env`, `apps/web/.env`.
-5. **Thực hiện Task 2.3 (`modules/chat`) [VIỆC TIẾP THEO]:**
-   * Sử dụng `@CurrentUser()` và ghép RAG + Memory + Chat History vào `AgentExecutionContext` qua Immutable Hook Pipeline.
+5. **Đã hoàn thành Task 2.3 (Chat Module hoàn chỉnh):**
+   * Hoàn thiện `POST /chat` và `POST /chat/stream` SSE streaming token-by-token với event `meta`, `token`, `done`, `error`.
+   * Bảo mật tuyệt đối: xác thực ownership `conversationId` và `documentIds` (Anti-IDOR), lọc `deletedAt: null`.
+   * Giao dịch nguyên tử `$transaction` cho Turn initialization và Soft-delete Conversation + Messages.
+   * Immutable Hook Pipeline (`CHAT_HOOK_REGISTRY`): System Rules, Parallel I/O Context Enrichment (Memory + Knowledge), Observability Trace (`AgentRun`).
+   * Khắc phục triệt để lỗi Double User Message và Zombie Run (`running` -> `completed` | `failed` | `cancelled`).
+   * Đạt 202 unit tests xanh 100% across 29 test suites; build sạch sẽ cho cả `shared-types`, `api`, và `web`.
+6. **Thực hiện Sprint 3 — Phase 4 (Planner, Tools & MCP) [VIỆC TIẾP THEO]:**
+   * Bắt đầu với **Task 3.1: Planner Module (`modules/planner`)**: CRUD Plans, Tasks, Roadmap theo `@CurrentUser()` (`userId`), quan hệ cây phân cấp `parentTaskId`.

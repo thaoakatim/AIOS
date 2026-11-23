@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { AgentExecutionContext } from '../context/agent-context.interface';
 import { AgentResponse } from '../context/agent-response.interface';
 import { AIOSHookHandler } from './aios-hook.interface';
@@ -36,6 +37,7 @@ export interface IHookRegistry {
   ): Promise<void>;
 }
 
+@Injectable()
 export class HookRegistry implements IHookRegistry {
   private hooks: AIOSHookHandler[] = [];
 
