@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { IActivePlanContext } from '@aios/shared-types';
 import { AgentExecutionContext } from '../../../core/context/agent-context.interface';
 import { LLMMessage } from '../../../core/llm/interfaces/llm.interface';
 import { TokenCounterService } from '../../../core/llm/services/token-counter.service';
+
+const MAX_ACTIVE_PLANS_TOKENS = 600;
 
 @Injectable()
 export class ChatPromptBuilderService {
@@ -35,6 +38,17 @@ export class ChatPromptBuilderService {
       systemParts.push(
         `## User Profile & Long-term Memory\n${memoryLines.join('\n')}`,
       );
+    }
+
+    // Active Plans & Tasks
+    if (ctx.context.activePlans) {
+      const plansSection = this.formatActivePlansSection(
+        ctx.context.activePlans,
+        model,
+      );
+      if (plansSection) {
+        systemParts.push(plansSection);
+      }
     }
 
     // RAG Knowledge Chunks
@@ -96,5 +110,57 @@ export class ChatPromptBuilderService {
 
     // Trả về: [SystemMessage, ...TrimmedHistory, CurrentUserMessage]
     return [systemMessage, ...trimmedHistory, currentUserMessage];
+  }
+
+  /**
+   * Render `ctx.context.activePlans` kèm giới hạn ngân sách token (~600 tokens)
+   * để không làm tràn system prompt khi người dùng có nhiều plan/task.
+   */
+  private formatActivePlansSection(
+    activePlans: Record<string, unknown>,
+    model: string,
+  ): string | null {
+    const rawPlans = activePlans.plans;
+    if (!Array.isArray(rawPlans) || rawPlans.length === 0) {
+      return null;
+    }
+
+    const header = '## Active Plans & Tasks';
+    const blocks: string[] = [header];
+
+    for (const rawPlan of rawPlans as IActivePlanContext[]) {
+      if (!rawPlan || typeof rawPlan.title !== 'string') continue;
+      const lines: string[] = [`- Plan "${rawPlan.title}" [${rawPlan.status}]`];
+
+      if (Array.isArray(rawPlan.tasks)) {
+        for (const task of rawPlan.tasks) {
+          if (!task || typeof task.title !== 'string') continue;
+          const dueSuffix = task.dueDate ? ` (due: ${task.dueDate})` : '';
+          lines.push(`  - [${task.status}] ${task.title}${dueSuffix}`);
+        }
+      }
+
+      const candidateBlock = lines.join('\n');
+      const nextText = [...blocks, candidateBlock].join('\n');
+      if (
+        blocks.length > 1 &&
+        this.tokenCounter.countTokens(nextText, model) > MAX_ACTIVE_PLANS_TOKENS
+      ) {
+        break;
+      }
+
+      if (
+        blocks.length === 1 &&
+        this.tokenCounter.countTokens(nextText, model) > MAX_ACTIVE_PLANS_TOKENS
+      ) {
+        // Giữ tối thiểu tiêu đề plan đầu tiên nếu vượt ngân sách ở plan 1.
+        blocks.push(`- Plan "${rawPlan.title}" [${rawPlan.status}]`);
+        break;
+      }
+
+      blocks.push(candidateBlock);
+    }
+
+    return blocks.length > 1 ? blocks.join('\n') : null;
   }
 }

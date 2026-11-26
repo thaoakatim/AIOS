@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MemoryCategory = exports.MemoryScope = exports.DocumentStatus = exports.TaskStatus = exports.AgentRunStatus = exports.MessageRole = void 0;
+exports.MemoryCategory = exports.MemoryScope = exports.DocumentStatus = exports.TaskStatus = exports.PlanStatus = exports.AgentRunStatus = exports.MessageRole = void 0;
 var MessageRole;
 (function (MessageRole) {
     MessageRole["USER"] = "user";
@@ -15,6 +15,12 @@ var AgentRunStatus;
     AgentRunStatus["COMPLETED"] = "completed";
     AgentRunStatus["FAILED"] = "failed";
 })(AgentRunStatus || (exports.AgentRunStatus = AgentRunStatus = {}));
+var PlanStatus;
+(function (PlanStatus) {
+    PlanStatus["ACTIVE"] = "active";
+    PlanStatus["COMPLETED"] = "completed";
+    PlanStatus["ARCHIVED"] = "archived";
+})(PlanStatus || (exports.PlanStatus = PlanStatus = {}));
 var TaskStatus;
 (function (TaskStatus) {
     TaskStatus["TODO"] = "todo";

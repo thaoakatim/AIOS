@@ -270,7 +270,7 @@ model Workflow {
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   // 1:1 & 1:N Relationships
-  plan  Plan?
+  plans Plan[]
   steps WorkflowStep[]
 
   @@map("workflows")
@@ -298,26 +298,30 @@ model WorkflowStep {
 //    Quản lý kế hoạch và phân rã thành các nhiệm vụ con.
 // =============================================================================
 
-/// Kế hoạch tổng thể, được sinh ra bởi Workflow.
-/// Quan hệ 1:1 với Workflow.
+/// Kế hoạch tổng thể — có thể tạo độc lập hoặc sinh ra bởi Workflow.
+/// Ràng buộc 1:1 active plan theo workflowId được đảm bảo bằng Partial Unique Index.
 model Plan {
   id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   userId      String    @db.Uuid
-  workflowId  String    @unique @db.Uuid // 1:1 với Workflow
+  workflowId  String?   @db.Uuid // Nullable: standalone plan hoặc liên kết Workflow
   title       String
-  status      String    @default("active") // "active" | "completed"
+  description String?
+  status      String    @default("active") // "active" | "completed" | "archived"
   version     Int       @default(1)
   contentHash String?
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
 
-  // Belongs to (1:1 & Ownership)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  // Belongs to (Ownership & Optional Workflow)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflow Workflow? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
 
   // 1:N Relationships
   tasks Task[]
 
+  @@index([userId, deletedAt])
+  @@index([workflowId])
   @@map("plans")
 }
 
@@ -328,12 +332,15 @@ model Task {
   planId       String    @db.Uuid
   parentTaskId String?   @db.Uuid // Nullable: Task gốc không có cha
   title        String
-  status       String    @default("todo") // "todo" | "in_progress" | "done"
+  description  String?
+  status       String    @default("todo") // "todo" | "in_progress" | "blocked" | "done"
+  order        Int       @default(0)
   dueDate      DateTime?
   version      Int       @default(1)
   contentHash  String?
   deletedAt    DateTime?
   createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
 
   // Belongs to
   plan       Plan  @relation(fields: [planId], references: [id], onDelete: Cascade)
@@ -342,6 +349,8 @@ model Task {
   // Self-referencing 1:N
   subTasks Task[] @relation("SubTasks")
 
+  @@index([planId, deletedAt])
+  @@index([parentTaskId])
   @@map("tasks")
 }
 

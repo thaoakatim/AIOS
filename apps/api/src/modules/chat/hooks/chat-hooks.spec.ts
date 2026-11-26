@@ -3,14 +3,17 @@ import { AgentExecutionContext } from '../../../core/context/agent-context.inter
 import { ContextBuilder } from '../../../core/context/context-builder';
 import { MemoryService } from '../../memory/memory.service';
 import { KnowledgeService } from '../../knowledge/knowledge.service';
+import { PlannerService } from '../../planner/planner.service';
 import { ChatRepository } from '../chat.repository';
 import { ChatSystemRulesHook } from './chat-system-rules.hook';
 import { ChatContextEnrichmentHook } from './chat-context-enrichment.hook';
+import { ChatPlannerHook } from './chat-planner.hook';
 import { ChatObservabilityHook } from './chat-observability.hook';
 
 describe('Chat Hooks', () => {
   let systemRulesHook: ChatSystemRulesHook;
   let enrichmentHook: ChatContextEnrichmentHook;
+  let plannerHook: ChatPlannerHook;
   let observabilityHook: ChatObservabilityHook;
 
   let memoryService: {
@@ -19,6 +22,9 @@ describe('Chat Hooks', () => {
   };
   let knowledgeService: {
     getRelevantChunks: jest.Mock;
+  };
+  let plannerService: {
+    enrichContext: jest.Mock;
   };
   let chatRepository: {
     updateAgentRun: jest.Mock;
@@ -34,6 +40,9 @@ describe('Chat Hooks', () => {
     knowledgeService = {
       getRelevantChunks: jest.fn(),
     };
+    plannerService = {
+      enrichContext: jest.fn(),
+    };
     chatRepository = {
       updateAgentRun: jest.fn(),
     };
@@ -42,16 +51,23 @@ describe('Chat Hooks', () => {
       providers: [
         ChatSystemRulesHook,
         ChatContextEnrichmentHook,
+        ChatPlannerHook,
         ChatObservabilityHook,
         { provide: MemoryService, useValue: memoryService },
         { provide: KnowledgeService, useValue: knowledgeService },
+        { provide: PlannerService, useValue: plannerService },
         { provide: ChatRepository, useValue: chatRepository },
       ],
     }).compile();
 
     systemRulesHook = module.get<ChatSystemRulesHook>(ChatSystemRulesHook);
-    enrichmentHook = module.get<ChatContextEnrichmentHook>(ChatContextEnrichmentHook);
-    observabilityHook = module.get<ChatObservabilityHook>(ChatObservabilityHook);
+    enrichmentHook = module.get<ChatContextEnrichmentHook>(
+      ChatContextEnrichmentHook,
+    );
+    plannerHook = module.get<ChatPlannerHook>(ChatPlannerHook);
+    observabilityHook = module.get<ChatObservabilityHook>(
+      ChatObservabilityHook,
+    );
 
     baseCtx = new ContextBuilder()
       .setExecutionId('exec-1')
@@ -124,7 +140,9 @@ describe('Chat Hooks', () => {
 
       expect(result.context.userProfile).toEqual({ pref_lang: 'TypeScript' });
       expect(result.prefetch?.ragChunks).toHaveLength(1);
-      expect(result.prefetch?.ragChunks?.[0].content).toBe('Relevant chunk content');
+      expect(result.prefetch?.ragChunks?.[0].content).toBe(
+        'Relevant chunk content',
+      );
     });
 
     it('handles graceful degradation when memory service throws an error', async () => {
@@ -156,7 +174,9 @@ describe('Chat Hooks', () => {
       expect(result.prefetch?.ragChunks).toBeUndefined();
       const warnings = result.metadata.warnings as string[];
       expect(warnings).toBeDefined();
-      expect(warnings[0]).toContain('KnowledgeService getRelevantChunks failed');
+      expect(warnings[0]).toContain(
+        'KnowledgeService getRelevantChunks failed',
+      );
     });
   });
 
@@ -186,7 +206,9 @@ describe('Chat Hooks', () => {
     });
 
     it('catches and suppresses repository errors without rethrowing', async () => {
-      chatRepository.updateAgentRun.mockRejectedValue(new Error('DB write failed'));
+      chatRepository.updateAgentRun.mockRejectedValue(
+        new Error('DB write failed'),
+      );
 
       await expect(
         observabilityHook.onAfterCompletion(
@@ -197,6 +219,37 @@ describe('Chat Hooks', () => {
           baseCtx,
         ),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe('ChatPlannerHook', () => {
+    it('enriches context with active plans via PlannerService', async () => {
+      const enriched = ContextBuilder.from(baseCtx)
+        .setActivePlans({
+          totalActivePlans: 1,
+          plans: [{ id: 'p1', title: 'Sprint 3', status: 'active', tasks: [] }],
+        })
+        .build();
+      plannerService.enrichContext.mockResolvedValue(enriched);
+
+      const result = await plannerHook.onBeforePromptBuild(baseCtx);
+
+      expect(plannerService.enrichContext).toHaveBeenCalledWith(baseCtx);
+      expect(result.context.activePlans).toEqual({
+        totalActivePlans: 1,
+        plans: [{ id: 'p1', title: 'Sprint 3', status: 'active', tasks: [] }],
+      });
+    });
+
+    it('handles graceful degradation when PlannerService throws an error', async () => {
+      plannerService.enrichContext.mockRejectedValue(new Error('DB offline'));
+
+      const result = await plannerHook.onBeforePromptBuild(baseCtx);
+
+      expect(result).toBeDefined();
+      expect(result.context.activePlans).toBeUndefined();
+      const warnings = result.metadata.warnings as string[];
+      expect(warnings[0]).toContain('PlannerService enrichContext failed');
     });
   });
 });

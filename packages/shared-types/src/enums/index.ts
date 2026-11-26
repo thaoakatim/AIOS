@@ -12,6 +12,12 @@ export enum AgentRunStatus {
     FAILED = 'failed',
 }
 
+export enum PlanStatus {
+    ACTIVE = 'active',
+    COMPLETED = 'completed',
+    ARCHIVED = 'archived',
+}
+
 export enum TaskStatus {
     TODO = 'todo',
     IN_PROGRESS = 'in_progress',

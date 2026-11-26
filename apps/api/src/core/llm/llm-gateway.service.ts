@@ -30,16 +30,14 @@ export class LLMGatewayService implements ILLMClient {
     private readonly config: ConfigService,
   ) {
     const provider =
-      (config.get('LLM_PROVIDER') as LLMProvider) || LLMProvider.OPENAI;
-    const model = config.get('LLM_MODEL') || 'gpt-4o-mini';
-    const apiKey = config.get('LLM_API_KEY');
-    const baseUrl = config.get('LLM_BASE_URL');
-    const temperature = config.get('LLM_TEMPERATURE')
-      ? parseFloat(config.get('LLM_TEMPERATURE')!)
-      : 0.7;
-    const maxTokens = config.get('LLM_MAX_TOKENS')
-      ? parseInt(config.get('LLM_MAX_TOKENS')!, 10)
-      : 4096;
+      config.get<LLMProvider>('LLM_PROVIDER') || LLMProvider.OPENAI;
+    const model = config.get<string>('LLM_MODEL') || 'gpt-4o-mini';
+    const apiKey = this.resolveApiKey(provider, config);
+    const baseUrl = config.get<string>('LLM_BASE_URL');
+    const rawTemp = config.get<string>('LLM_TEMPERATURE');
+    const temperature = rawTemp ? parseFloat(rawTemp) : 0.7;
+    const rawMaxTokens = config.get<string>('LLM_MAX_TOKENS');
+    const maxTokens = rawMaxTokens ? parseInt(rawMaxTokens, 10) : 4096;
 
     this.client = this.factory.createClient({
       provider,
@@ -83,11 +81,27 @@ export class LLMGatewayService implements ILLMClient {
     finishReason: string;
     trimmed: boolean;
   }> {
-    const model = this.config.get('LLM_MODEL') || 'gpt-4o-mini';
+    const model = this.config.get<string>('LLM_MODEL') || 'gpt-4o-mini';
     const trimmed =
       this.tokenCounter.trimMessagesToFit(messages, model).length <
       messages.length;
     const result = await this.client.generate(messages, options);
     return { ...result, trimmed };
+  }
+
+  private resolveApiKey(
+    provider: LLMProvider,
+    config: ConfigService,
+  ): string | undefined {
+    const sharedKey = config.get<string>('LLM_API_KEY');
+    if (sharedKey) return sharedKey;
+
+    if (provider === LLMProvider.OPENAI) {
+      return config.get<string>('OPENAI_API_KEY');
+    }
+    if (provider === LLMProvider.GEMINI) {
+      return config.get<string>('GEMINI_API_KEY');
+    }
+    return undefined;
   }
 }

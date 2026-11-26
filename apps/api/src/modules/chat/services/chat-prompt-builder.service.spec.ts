@@ -146,4 +146,54 @@ describe('ChatPromptBuilderService', () => {
     expect(messages[messages.length - 1].role).toBe('user');
     expect(messages[messages.length - 1].content).toBe('Current question');
   });
+
+  it('renders Active Plans & Tasks into the system message and enforces token budget', () => {
+    const longTaskTitle = 'Implement feature '.repeat(350);
+    const ctx = new ContextBuilder()
+      .setExecutionId('exec-2')
+      .setUserId('user-1')
+      .setSessionId('conv-1')
+      .setQuery('What are my tasks?')
+      .setActivePlans({
+        totalActivePlans: 2,
+        plans: [
+          {
+            id: 'p1',
+            title: 'Plan Alpha',
+            status: 'active',
+            tasks: [
+              {
+                id: 't1',
+                title: 'Finish Planner API',
+                status: 'in_progress',
+                dueDate: '2026-11-30',
+              },
+            ],
+          },
+          {
+            id: 'p2',
+            title: 'Plan Overflow',
+            status: 'active',
+            tasks: [
+              {
+                id: 't2',
+                title: longTaskTitle,
+                status: 'todo',
+                dueDate: null,
+              },
+            ],
+          },
+        ],
+      })
+      .build();
+
+    const messages = service.buildMessages(ctx);
+
+    expect(messages[0].content).toContain('## Active Plans & Tasks');
+    expect(messages[0].content).toContain('Plan "Plan Alpha" [active]');
+    expect(messages[0].content).toContain(
+      '[in_progress] Finish Planner API (due: 2026-11-30)',
+    );
+    expect(messages[0].content).not.toContain('Plan Overflow');
+  });
 });

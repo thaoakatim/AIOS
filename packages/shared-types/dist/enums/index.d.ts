@@ -10,6 +10,11 @@ export declare enum AgentRunStatus {
     COMPLETED = "completed",
     FAILED = "failed"
 }
+export declare enum PlanStatus {
+    ACTIVE = "active",
+    COMPLETED = "completed",
+    ARCHIVED = "archived"
+}
 export declare enum TaskStatus {
     TODO = "todo",
     IN_PROGRESS = "in_progress",

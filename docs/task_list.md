@@ -167,10 +167,12 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
 
 > **Mục tiêu:** AI có khả năng quản lý công việc và tương tác ra thế giới bên ngoài (tất cả đều đi qua `AIOSAuthGuard`, tuân thủ `userId` và soft-delete `deletedAt`).
 
-- [ ] **Task 3.1: Planner Module (`modules/planner`)**
-  - CRUD Plans, Tasks, Roadmap theo `@CurrentUser()` (`userId`) (Trạng thái: `todo`, `in_progress`, `blocked`, `done`; hỗ trợ soft-delete `deletedAt` và tăng `version`).
-  - Hỗ trợ cây công việc phân cấp (`parentTaskId` cho sub-tasks).
-  - Tính năng AI tự động phân rã mục tiêu từ `Workflow` thành các `Task` cụ thể.
+- [x] **Task 3.1: Planner Module (`modules/planner`)**
+  - CRUD Plans, Tasks, Roadmap theo `@CurrentUser()` (`userId`) (Trạng thái: `todo`, `in_progress`, `blocked`, `done`; hỗ trợ soft-delete `deletedAt`, tăng `version` và canonical `contentHash`).
+  - Hỗ trợ cây công việc phân cấp (`parentTaskId` cho sub-tasks) kèm Aggregate Root locking (`FOR UPDATE`), chống cycle, kiểm tra chiều sâu toàn subtree (`MAX_TASK_DEPTH = 5`), và xóa mềm đệ quy.
+  - Tính năng AI tự động phân rã mục tiêu (`POST /planner/decompose`, hỗ trợ `dryRun` và gắn optional `workflowId` qua Partial Unique Index) thành `Plan` + cây `Task` cụ thể, đồng thời tích hợp runtime vào `ChatModule` qua `ChatPlannerHook` & `ChatPromptBuilderService`.
+  - Đầy đủ tài liệu nghiệp vụ, kỹ thuật và quy chuẩn: [planner-module-business.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/planner/docs/planner-module-business.md), [planner-module-technical.md](file:///Users/thaonh21/AIOS/apps/api/src/modules/planner/docs/planner-module-technical.md), và [docs/modules_rule/planner-module.md](file:///Users/thaonh21/AIOS/docs/modules_rule/planner-module.md).
+  - *DoD:* 241 unit tests xanh 100% (31 test suites); `pnpm --filter @aios/shared-types build`, `nest build`, `web lint`, `web build` sạch sẽ 100%.
 
 - [ ] **Task 3.2: Tool Registry & Execution Engine (`modules/tools`)**
   - Định nghĩa `ToolDefinition` (tự sinh JSON Schema tương thích LLM Function Calling).
@@ -321,5 +323,10 @@ Dự án **AIOS (Personal AI Operating System)** được thiết kế theo **Cl
    * Immutable Hook Pipeline (`CHAT_HOOK_REGISTRY`): System Rules, Parallel I/O Context Enrichment (Memory + Knowledge), Observability Trace (`AgentRun`).
    * Khắc phục triệt để lỗi Double User Message và Zombie Run (`running` -> `completed` | `failed` | `cancelled`).
    * Đạt 202 unit tests xanh 100% across 29 test suites; build sạch sẽ cho cả `shared-types`, `api`, và `web`.
-6. **Thực hiện Sprint 3 — Phase 4 (Planner, Tools & MCP) [VIỆC TIẾP THEO]:**
-   * Bắt đầu với **Task 3.1: Planner Module (`modules/planner`)**: CRUD Plans, Tasks, Roadmap theo `@CurrentUser()` (`userId`), quan hệ cây phân cấp `parentTaskId`.
+6. **Đã hoàn thành Task 3.1 (Planner Module):**
+   * Hoàn thiện `PlannerModule` (`POST /planner/decompose`, Plans CRUD, Roadmap aggregation, Hierarchical Tasks CRUD) theo `@CurrentUser()` và cô lập `userId`.
+   * Cập nhật `schema.prisma` + migration `20261126163000_make_plan_workflow_optional_and_add_planner_sync_fields` (`Plan.workflowId` nullable kèm Partial Unique Index `"plans_workflowId_active_unique"`, `description`, `order`, `updatedAt @default(now())`, composite indexes).
+   * Lock mức Aggregate Root (`FOR UPDATE` / `FOR UPDATE OF p`) chống cycle/stale-read/subtree-depth overflow, tombstone cascade, canonical `contentHash`, và tích hợp `ChatPlannerHook` vào `CHAT_HOOK_REGISTRY` + `ChatPromptBuilderService`.
+   * Đạt 241 unit tests xanh 100% across 31 test suites; build sạch sẽ cho `shared-types`, `api`, và `web`.
+7. **Tiếp tục Sprint 3 — Phase 4 (Tools & MCP) [VIỆC TIẾP THEO]:**
+   * Bắt đầu với **Task 3.2: Tool Registry & Execution Engine (`modules/tools`)**: định nghĩa `ToolDefinition`, Built-in Tools (`FilesystemTool`, `CalculatorTool`, `WebSearchTool`, `PlannerTool`), Policy Guard `onBeforeToolExecution` và ghi log `ToolExecution`.

@@ -5,6 +5,8 @@ import { KnowledgeService } from './modules/knowledge/knowledge.service';
 import { KnowledgeRepository } from './modules/knowledge/knowledge.repository';
 import { RecursiveTextSplitter } from './modules/knowledge/services/recursive-text-splitter';
 import { MemoryService } from './modules/memory/memory.service';
+import { PlannerService } from './modules/planner/planner.service';
+import { PlannerRepository } from './modules/planner/planner.repository';
 import { EmbeddingGatewayService } from './core/llm/embedding-gateway.service';
 
 /**
@@ -52,5 +54,10 @@ describe('AppModule', () => {
 
   it('keeps MemoryService resolvable for the Chat Context Builder', () => {
     expect(module.get(MemoryService, { strict: false })).toBeDefined();
+  });
+
+  it('resolves PlannerService and PlannerRepository for ChatModule integration', () => {
+    expect(module.get(PlannerService, { strict: false })).toBeDefined();
+    expect(module.get(PlannerRepository, { strict: false })).toBeDefined();
   });
 });
