@@ -1,7 +1,7 @@
 # 🤖 AIOS — Personal AI Operating System
 
 > **Personal Chief of Staff (Trợ lý điều hành cá nhân)**  
-> *Được xây dựng theo phong cách Modular Monolith & Clean Architecture, kế thừa các nguyên lý trừu tượng hóa cốt lõi, Context Pattern và Lifecycle Hooks từ Caremate.*
+> *Được xây dựng theo phong cách Modular Monolith & Clean Architecture, kế thừa các nguyên lý trừu tượng hóa cốt lõi, Context Pattern và Lifecycle Hooks.*
 
 ---
 
@@ -13,7 +13,7 @@
   * **Web App (React/Vite):** Chạy trên trình duyệt (HTTPS), kết nối an toàn với Local Companion qua Browser Private Network Access (PNA) và mã Pairing có scope.
   * **Desktop App (Electron):** Đóng gói UI, quản lý vòng đời sidecar và cấp phát port động (`Dynamic Port Allocation`).
   * **NestJS Local Companion:** Runtime xử lý nghiệp vụ, chỉ bind loopback (`127.0.0.1`).
-* **Kế thừa 4 Nguyên tắc Cốt lõi từ Caremate:**  
+* **Kế thừa 4 Nguyên tắc Cốt lõi:**  
   1. *Pure Core Contracts:* Tầng `core/` chỉ định nghĩa Pure TypeScript Interfaces (`ILLMClient`, `IVectorStore`, `IJobQueue`...), độc lập 100% với SDK bên ngoài.
   2. *Immutable Context Object:* `AgentExecutionContext` bất biến mang `userId` ngay tại gốc để đảm bảo Data Isolation.
   3. *AIOS Lifecycle Hooks:* Interceptors đánh chặn (`onBeforePromptBuild` pipeline bất biến, `onBeforeToolExecution` Policy Guard, `onAfterCompletion` telemetry).
